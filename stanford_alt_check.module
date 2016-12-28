@@ -1,0 +1,179 @@
+<?php
+
+/**
+ * @file
+ * Stanford Alt Check Module.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function stanford_alt_check_menu() {
+  $items = array();
+  $items['admin/content/images'] = array(
+    'title' => "Image Alt's",
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_alt_check_images'),
+    'file' => 'stanford_alt_check.forms.inc',
+    'access arguments' => array('access content overview'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/content/images/wysiwyg'] = array(
+    'title' => "WYSIWYG Image Alt's",
+    'page callback' => 'stanford_alt_check_images_wysiwyg',
+    'access arguments' => array('access content overview'),
+    'type' => MENU_LOCAL_ACTION,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function stanford_alt_check_theme($existing, $type, $theme, $path) {
+  return array(
+    'stanford_alt_check_images' => array(
+      'render element' => 'form',
+      'file' => 'stanford_alt_check.theme.inc',
+    ),
+  );
+}
+
+/**
+ * Menu callback to display list of entities with missing alt attributes.
+ *
+ * @return array
+ *   Render array of the table of entities.
+ */
+function stanford_alt_check_images_wysiwyg() {
+  drupal_set_title(t("WYSIWYG Image Alt's"));
+  $all_entities = stanford_alt_check_get_wysiwyg();
+  $rows = array();
+
+  foreach ($all_entities as $type => $entities) {
+    foreach ($entities as $entity) {
+      // Field Collection Items.
+      if (method_exists($entity, 'hostEntity')) {
+        $type = $entity->hostEntityType();
+        $entity = $entity->hostEntity;
+      }
+
+      if ($type == 'bean') {
+        $title = $entity->label;
+      }
+      else {
+        $title = $entity->title;
+      }
+
+      $entity_info = entity_get_info($type);
+      $uri = entity_uri($type, $entity);
+      $rows[] = array(
+        'title' => $title,
+        'url' => $uri['path'],
+        'type' => $entity_info['label'],
+
+      );
+    }
+  }
+
+  // Sorts the rows based on the get parameters.
+  usort($rows, function ($a, $b) {
+    $get = drupal_get_query_parameters($_GET);
+    if (!isset($get['order'])) {
+      $get['order'] = 'Entity';
+      $get['sort'] = 'asc';
+    }
+
+    if ($get['order'] == 'Entity') {
+      if ($get['sort'] == 'asc') {
+        $r = strcmp($a['title'], $b['title']);
+      }
+      else {
+        $r = strcmp($b['title'], $a['title']);
+      }
+    }
+    else {
+      if ($get['sort'] == 'asc') {
+        $r = strcmp($a['type'], $b['type']);
+      }
+      else {
+        $r = strcmp($b['type'], $a['type']);
+      }
+    }
+    return $r;
+  });
+
+  // Combine url & title into a link and unset the url.
+  foreach ($rows as &$row) {
+    $row['title'] = l(t($row['title']), $row['url']);
+    unset($row['url']);
+  }
+
+  // Sets the pager.
+  $current_page = pager_default_initialize(count($rows), 10);
+  $chunks = array_chunk($rows, 10, TRUE);
+
+  $output['message'] = array(
+    '#markup' => t('<p>Below are a list of entities that have an image embeded in html with a missing ALT attribute. Please view and edit the entity directly to correct these errors.</p>')
+  );
+  $output['table'] = array(
+    '#theme' => 'table',
+    '#header' => array(
+      array('data' => t('Entity'), 'field' => 'entity'),
+      array('data' => t('Type'), 'field' => 'type'),
+    ),
+    '#rows' => $chunks[$current_page],
+  );
+  $output['pager'] = array(
+    '#theme' => 'pager',
+  );
+  return $output;
+}
+
+/**
+ * Gets all entities with missing wywisyg image alts.
+ *
+ * @return array
+ *   Entities with missing alt attributes in wysiwyg fields.
+ */
+function stanford_alt_check_get_wysiwyg() {
+  $image_fields = array();
+  $wywisyg_field_types = array('text', 'text_long', 'text_with_summary');
+  foreach (field_info_fields() as $field) {
+    $types[$field['type']] = $field['type'];
+    if (in_array($field['type'], $wywisyg_field_types)) {
+      foreach ($field['bundles'] as $type => $bundles) {
+        foreach ($bundles as $bundle) {
+          $instance = field_info_instance($type, $field['field_name'], $bundle);
+          if ($instance['settings']['text_processing']) {
+            $image_fields[] = $field;
+          }
+        }
+      }
+    }
+  }
+
+  $return_data = array();
+  foreach ($image_fields as $field) {
+    $query = new EntityFieldQuery();
+    $query->fieldCondition($field['field_name'], 'value', '%<img%', 'like');
+    $results = $query->execute();
+    foreach ($results as $type => $entities) {
+      foreach (entity_load($type, array_keys($entities)) as $id => $entity) {
+        if ($field_items = field_get_items($type, $entity, $field['field_name'])) {
+          foreach ($field_items as $item) {
+            $dom = new DOMDocument();
+            $dom->loadHTML($item['value']);
+            /** @var DOMElement $img_element */
+            foreach ($dom->getElementsByTagName('img') as $img_element) {
+              if (!$img_element->getAttribute('alt')) {
+                $return_data[$type][$id] = $entity;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return $return_data;
+}
