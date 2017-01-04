@@ -5,3 +5,7 @@ version = 7.x-1.0-dev
 package = Stanford
 
 files[] = stanford_alt_check.theme.inc
+
+dependencies[] = node
+dependencies[] = entity
+dependencies[] = image

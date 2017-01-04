@@ -1,0 +1,30 @@
+<?php
+
+/**
+ * @file
+ * Stanford_alt_Check install hooks.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function stanford_module_install() {
+}
+
+/**
+ * Implements hook_enable().
+ */
+function stanford_module_enable() {
+}
+
+/**
+ * Implements hook_disable().
+ */
+function stanford_module_disable() {
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function stanford_module_uninstall() {
+}
