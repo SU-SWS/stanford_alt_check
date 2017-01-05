@@ -39,7 +39,7 @@ function theme_stanford_alt_check_image_uploads($vars) {
   $current_page = pager_default_initialize(count($rows), 10);
   $chunks = array_chunk($rows, 10, TRUE);
 
-  $output = theme_table(array(
+  $table_vars = array(
     'header' => $header,
     'rows' => $chunks[$current_page],
     'attributes' => array(),
@@ -47,8 +47,9 @@ function theme_stanford_alt_check_image_uploads($vars) {
     'caption' => '',
     'colgroups' => array(),
     'sticky' => FALSE,
-  ));
+  );
 
+  $output = theme('table', $table_vars);
   $output .= theme('pager', array('quantity', count($rows)));
   $output .= drupal_render_children($form);
 

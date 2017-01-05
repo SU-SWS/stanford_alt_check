@@ -38,6 +38,7 @@ function stanford_alt_check_menu() {
     'type' => MENU_LOCAL_TASK,
   );
 
+  // Manage Content Menu Items.
   $items['admin/images'] = array(
     'title' => "Manage Images",
     'page callback' => 'stanford_alt_check_images',
@@ -85,7 +86,7 @@ function stanford_alt_check_theme($existing, $type, $theme, $path) {
  *   Render array of the table of entities.
  */
 function stanford_alt_check_image_wysiwyg() {
-  drupal_set_title(t("WYSIWYG Image Alt's"));
+  drupal_set_title(t("WYSIWYG Images"));
   $all_entities = stanford_alt_check_get_wysiwyg();
   $rows = array();
 
@@ -95,13 +96,14 @@ function stanford_alt_check_image_wysiwyg() {
         $field_instance = field_info_instance($type, $field_name, $bundle);
 
         foreach ($entities as $entity) {
-          // Field Collection Items.
+          // Field Collection Items. Change which entity we are referring to.
           if (method_exists($entity, 'hostEntity')) {
             $type = $entity->hostEntityType();
             $bundle = $entity->hostEntityBundle();
             $entity = $entity->hostEntity();
           }
 
+          // Beans use label property as the identifier.
           if ($type == 'bean') {
             $title = $entity->label;
           }
@@ -111,9 +113,17 @@ function stanford_alt_check_image_wysiwyg() {
 
           $entity_info = entity_get_info($type);
           $uri = entity_uri($type, $entity);
+
+          // Check if the entity has a standard edit path & user has access.
           if (drupal_valid_path($uri['path'] . '/edit') && entity_access('update', $type, $entity)) {
             $uri['path'] = $uri['path'] . '/edit';
           }
+
+          // Cut title down if its super long.
+          if (strlen($title) > 50) {
+            $title = substr($title, 0, 50) . "...";
+          }
+
           $rows[] = array(
             'Entity' => l(t($title), $uri['path']),
             'Field' => $field_instance['label'],
@@ -128,9 +138,9 @@ function stanford_alt_check_image_wysiwyg() {
   // Sort based on get parameters.
   usort($rows, 'stanford_alt_check_sort_rows');
 
-  // Sets the pager.
-  $current_page = pager_default_initialize(count($rows), 10);
-  $chunks = array_chunk($rows, 10, TRUE);
+  // Establishes the pager.
+  $current_page = pager_default_initialize(count($rows), 25);
+  $chunks = array_chunk($rows, 125, TRUE);
 
   $output['message'] = array(
     '#markup' => t('<p>Below are a list of entities that have an image embeded in html with a missing ALT attribute. Please view and edit the entity directly to correct these errors.</p>')
@@ -247,7 +257,7 @@ function stanford_alt_check_images() {
     '#markup' => t('<p>Below are a list of entities that have an image with a missing ALT attribute. Please view and edit the entity to correct these errors.</p>')
   );
   $rows = stanford_alt_check_build_rows(stanford_alt_check_get_wysiwyg());
-  $rows += stanford_alt_check_build_rows(stanford_alt_check_upload_entities());
+  $rows = stanford_alt_check_build_rows(stanford_alt_check_upload_entities(), $rows);
 
   // Sort based on get parameters.
   usort($rows, 'stanford_alt_check_sort_rows');
@@ -276,20 +286,23 @@ function stanford_alt_check_images() {
  *
  * @param array $data
  *   Entity data to parse.
+ * @param array $rows
+ *   Existing rows to add to.
  *
  * @return array
  *   Simple array to be used in tables.
  */
-function stanford_alt_check_build_rows($data) {
-  $rows = array();
+function stanford_alt_check_build_rows($data, $rows = array()) {
   foreach ($data as $field_name => $types) {
     foreach ($types as $type => $bundles) {
       foreach ($bundles as $bundle => $entities) {
         $field_instance = field_info_instance($type, $field_name, $bundle);
         $field_name = $field_instance['label'];
+
         foreach ($entities as $id => $entity) {
           switch ($type) {
             case 'field_collection_item':
+              // Field Collections. Get the data about the host entity.
               $eid = $entity->hostEntityId();
               $e = $entity->hostEntity();
               $etype = $entity->hostEntityType();
@@ -304,6 +317,7 @@ function stanford_alt_check_build_rows($data) {
               break;
 
             case 'bean':
+              // Beans don't use the title to describe them.
               $e = $entity;
               $etype = $type;
               $ebundle = $bundle;
@@ -312,6 +326,7 @@ function stanford_alt_check_build_rows($data) {
               break;
 
             default:
+              // Nodes, Users and other standard entities.
               $e = $entity;
               $etype = $type;
               $ebundle = $bundle;
@@ -322,12 +337,24 @@ function stanford_alt_check_build_rows($data) {
 
           $path = entity_uri($etype, $e);
           $e_info = entity_get_info($etype);
-          $rows[$eid] = array(
-            'Entity' => l(t($title), $path['path']),
-            'Field' => $field_name,
-            'Entity Type' => $e_info['label'],
-            'Bundle' => $e_info['bundles'][$ebundle]['label'],
-          );
+
+          // Concat other fields to the field list.
+          if (isset($rows["$etype-$eid"])) {
+            $efields = explode('; ', $rows["$etype-$eid"]['Field']);
+            if (!in_array($field_name, $efields)) {
+              $efields[] = $field_name;
+            }
+            $rows["$etype-$eid"]['Field'] = implode('; ', $efields);
+          }
+          else {
+            // Build row with first field.
+            $rows["$type-$eid"] = array(
+              'Entity' => l(t($title), $path['path']),
+              'Field' => $field_name,
+              'Entity Type' => $e_info['label'],
+              'Bundle' => $e_info['bundles'][$ebundle]['label'],
+            );
+          }
         }
       }
     }
@@ -335,15 +362,29 @@ function stanford_alt_check_build_rows($data) {
   return $rows;
 }
 
+/**
+ * Sort function to sort arrays with strings based on GET parameters.
+ *
+ * @param array $a
+ *   Array 1 to compare.
+ * @param array $b
+ *   Array 2 to compare.
+ *
+ * @return int
+ *   Order of the two arrays.
+ */
 function stanford_alt_check_sort_rows($a, $b) {
   $get = drupal_get_query_parameters($_GET);
+
+  // Check if we are to order specifically and if the keys exist to order on.
   if (isset($get['order']) && isset($a[$get['order']]) && isset($b[$get['order']])) {
+    // Which direction.
     if (!isset($get['sort']) || $get['sort'] == 'asc') {
       return strcmp(strip_tags($a[$get['order']]), strip_tags($b[$get['order']]));
     }
-    else {
-      return strcmp(strip_tags($b[$get['order']]), strip_tags($a[$get['order']]));
-    }
+    return strcmp(strip_tags($b[$get['order']]), strip_tags($a[$get['order']]));
   }
+
+  // Fallback: sort by first element of each array.
   return strcmp(strip_tags($a[key($a)]), strip_tags($b[key($b)]));
 }
