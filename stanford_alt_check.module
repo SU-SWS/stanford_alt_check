@@ -6,24 +6,63 @@
  */
 
 /**
+ * Implements hook_ctools_plugin_api().
+ */
+function stanford_alt_check_ctools_plugin_api($owner, $api) {
+  if ($owner == "context" && $api == "context") {
+    return array("version" => 3);
+  }
+}
+
+/**
  * Implements hook_menu().
  */
 function stanford_alt_check_menu() {
   $items = array();
   $items['admin/content/images'] = array(
-    'title' => "Image Alt's",
+    'title' => "Images",
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('stanford_alt_check_images'),
+    'page arguments' => array('stanford_alt_check_image_uploads'),
     'file' => 'stanford_alt_check.forms.inc',
     'access arguments' => array('access content overview'),
     'type' => MENU_NORMAL_ITEM,
   );
-  $items['admin/content/images/wysiwyg'] = array(
-    'title' => "WYSIWYG Image Alt's",
-    'page callback' => 'stanford_alt_check_images_wysiwyg',
-    'access arguments' => array('access content overview'),
-    'type' => MENU_LOCAL_ACTION,
+  $items['admin/content/images/uploads'] = array(
+    'title' => "Image Uploads",
+    'type' => MENU_DEFAULT_LOCAL_TASK,
   );
+  $items['admin/content/images/wysiwyg'] = array(
+    'title' => "WYSIWYG Images",
+    'page callback' => 'stanford_alt_check_image_wysiwyg',
+    'access arguments' => array('access content overview'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['admin/images'] = array(
+    'title' => "Manage Images",
+    'page callback' => 'stanford_alt_check_images',
+    'file' => 'stanford_alt_check.forms.inc',
+    'access arguments' => array('access content overview'),
+    'type' => MENU_NORMAL_ITEM,
+    'menu_name' => 'menu-manage-content-by-type',
+  );
+  $items['admin/images/uploads'] = array(
+    'title' => "Manage Image Uploads",
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_alt_check_image_uploads'),
+    'file' => 'stanford_alt_check.forms.inc',
+    'access arguments' => array('access content overview'),
+    'type' => MENU_NORMAL_ITEM,
+    'menu_name' => 'menu-manage-content-by-type',
+  );
+  $items['admin/images/wysiwyg'] = array(
+    'title' => "Manage WYSIWYG Images",
+    'page callback' => 'stanford_alt_check_image_wysiwyg',
+    'access arguments' => array('access content overview'),
+    'type' => MENU_NORMAL_ITEM,
+    'menu_name' => 'menu-manage-content-by-type',
+  );
+
   return $items;
 }
 
@@ -32,7 +71,7 @@ function stanford_alt_check_menu() {
  */
 function stanford_alt_check_theme($existing, $type, $theme, $path) {
   return array(
-    'stanford_alt_check_images' => array(
+    'stanford_alt_check_image_uploads' => array(
       'render element' => 'form',
       'file' => 'stanford_alt_check.theme.inc',
     ),
@@ -45,69 +84,49 @@ function stanford_alt_check_theme($existing, $type, $theme, $path) {
  * @return array
  *   Render array of the table of entities.
  */
-function stanford_alt_check_images_wysiwyg() {
+function stanford_alt_check_image_wysiwyg() {
   drupal_set_title(t("WYSIWYG Image Alt's"));
   $all_entities = stanford_alt_check_get_wysiwyg();
   $rows = array();
 
-  foreach ($all_entities as $type => $entities) {
-    foreach ($entities as $entity) {
-      // Field Collection Items.
-      if (method_exists($entity, 'hostEntity')) {
-        $type = $entity->hostEntityType();
-        $entity = $entity->hostEntity;
-      }
+  foreach ($all_entities as $field_name => $types) {
+    foreach ($types as $type => $bundles) {
+      foreach ($bundles as $bundle => $entities) {
+        $field_instance = field_info_instance($type, $field_name, $bundle);
 
-      if ($type == 'bean') {
-        $title = $entity->label;
-      }
-      else {
-        $title = $entity->title;
-      }
+        foreach ($entities as $entity) {
+          // Field Collection Items.
+          if (method_exists($entity, 'hostEntity')) {
+            $type = $entity->hostEntityType();
+            $bundle = $entity->hostEntityBundle();
+            $entity = $entity->hostEntity();
+          }
 
-      $entity_info = entity_get_info($type);
-      $uri = entity_uri($type, $entity);
-      $rows[] = array(
-        'title' => $title,
-        'url' => $uri['path'],
-        'type' => $entity_info['label'],
+          if ($type == 'bean') {
+            $title = $entity->label;
+          }
+          else {
+            $title = $entity->title;
+          }
 
-      );
+          $entity_info = entity_get_info($type);
+          $uri = entity_uri($type, $entity);
+          if (drupal_valid_path($uri['path'] . '/edit') && entity_access('update', $type, $entity)) {
+            $uri['path'] = $uri['path'] . '/edit';
+          }
+          $rows[] = array(
+            'Entity' => l(t($title), $uri['path']),
+            'Field' => $field_instance['label'],
+            'Type' => $entity_info['label'],
+            'Bundle' => $entity_info['bundles'][$bundle]['label'],
+          );
+        }
+      }
     }
   }
 
-  // Sorts the rows based on the get parameters.
-  usort($rows, function ($a, $b) {
-    $get = drupal_get_query_parameters($_GET);
-    if (!isset($get['order'])) {
-      $get['order'] = 'Entity';
-      $get['sort'] = 'asc';
-    }
-
-    if ($get['order'] == 'Entity') {
-      if ($get['sort'] == 'asc') {
-        $r = strcmp($a['title'], $b['title']);
-      }
-      else {
-        $r = strcmp($b['title'], $a['title']);
-      }
-    }
-    else {
-      if ($get['sort'] == 'asc') {
-        $r = strcmp($a['type'], $b['type']);
-      }
-      else {
-        $r = strcmp($b['type'], $a['type']);
-      }
-    }
-    return $r;
-  });
-
-  // Combine url & title into a link and unset the url.
-  foreach ($rows as &$row) {
-    $row['title'] = l(t($row['title']), $row['url']);
-    unset($row['url']);
-  }
+  // Sort based on get parameters.
+  usort($rows, 'stanford_alt_check_sort_rows');
 
   // Sets the pager.
   $current_page = pager_default_initialize(count($rows), 10);
@@ -120,7 +139,9 @@ function stanford_alt_check_images_wysiwyg() {
     '#theme' => 'table',
     '#header' => array(
       array('data' => t('Entity'), 'field' => 'entity'),
+      array('data' => t('Field'), 'field' => 'field'),
       array('data' => t('Type'), 'field' => 'type'),
+      array('data' => t('Bundle'), 'field' => 'bundle'),
     ),
     '#rows' => $chunks[$current_page],
   );
@@ -167,7 +188,8 @@ function stanford_alt_check_get_wysiwyg() {
             /** @var DOMElement $img_element */
             foreach ($dom->getElementsByTagName('img') as $img_element) {
               if (!$img_element->getAttribute('alt')) {
-                $return_data[$type][$id] = $entity;
+                list(, , $bundle) = entity_extract_ids($type, $entity);
+                $return_data[$field['field_name']][$type][$bundle][$id] = $entity;
               }
             }
           }
@@ -176,4 +198,152 @@ function stanford_alt_check_get_wysiwyg() {
     }
   }
   return $return_data;
+}
+
+/**
+ * Gets the fields and entities with missing alt attributes.
+ *
+ * @return array
+ *   Keyed array of fields and entities with missing alt attributes.
+ *   First set of array keys are the field machine name used. Second key is the
+ *   entity type. Then 3rd key is the entity id. The value of the 3rd key is the
+ *   entity to be used.
+ *   Ex. array('field_image' => array('node' => array(10 => [Node Object])))
+ */
+function stanford_alt_check_upload_entities() {
+  $image_fields = array();
+  // Get all image type fields.
+  foreach (field_info_fields() as $field) {
+    if ($field['type'] == 'image') {
+      $image_fields[] = $field;
+    }
+  }
+
+  $return_data = array();
+  // Gets all entities where the image alt attribute is missing.
+  foreach ($image_fields as $field) {
+    $query = new EntityFieldQuery();
+    $query->fieldCondition($field['field_name'], 'alt', '', '=');
+    $results = $query->execute();
+    foreach ($results as $type => $result_entities) {
+      foreach (entity_load($type, array_keys($result_entities)) as $entity) {
+        list($id, , $bundle) = entity_extract_ids($type, $entity);
+        $return_data[$field['field_name']][$type][$bundle][$id] = $entity;
+      }
+    }
+  }
+  return $return_data;
+}
+
+/**
+ * Menu callback to display all entities with missing alt attributes.
+ *
+ * @return array
+ *   Render array with the table.
+ */
+function stanford_alt_check_images() {
+  $output = array();
+  $output['message'] = array(
+    '#markup' => t('<p>Below are a list of entities that have an image with a missing ALT attribute. Please view and edit the entity to correct these errors.</p>')
+  );
+  $rows = stanford_alt_check_build_rows(stanford_alt_check_get_wysiwyg());
+  $rows += stanford_alt_check_build_rows(stanford_alt_check_upload_entities());
+
+  // Sort based on get parameters.
+  usort($rows, 'stanford_alt_check_sort_rows');
+
+  // Pager.
+  $current_page = pager_default_initialize(count($rows), 25);
+  $chunks = array_chunk($rows, 25, TRUE);
+  $output['table'] = array(
+    '#theme' => 'table',
+    '#header' => array(
+      array('data' => t('Entity'), 'field' => 'Entity'),
+      array('data' => t('Field'), 'field' => 'Field'),
+      array('data' => t('Entity Type'), 'field' => 'Entity Type'),
+      array('data' => t('Bundle'), 'field' => 'Bundle'),
+    ),
+    '#rows' => $chunks[$current_page],
+  );
+  $output['pager'] = array(
+    '#theme' => 'pager',
+  );
+  return $output;
+}
+
+/**
+ * Process the entity list to build table rows.
+ *
+ * @param array $data
+ *   Entity data to parse.
+ *
+ * @return array
+ *   Simple array to be used in tables.
+ */
+function stanford_alt_check_build_rows($data) {
+  $rows = array();
+  foreach ($data as $field_name => $types) {
+    foreach ($types as $type => $bundles) {
+      foreach ($bundles as $bundle => $entities) {
+        $field_instance = field_info_instance($type, $field_name, $bundle);
+        $field_name = $field_instance['label'];
+        foreach ($entities as $id => $entity) {
+          switch ($type) {
+            case 'field_collection_item':
+              $eid = $entity->hostEntityId();
+              $e = $entity->hostEntity();
+              $etype = $entity->hostEntityType();
+              $ebundle = $entity->hostEntityBundle();
+              if ($etype == 'bean') {
+                $title = $e->label;
+              }
+              else {
+                $title = $e->title;
+              }
+
+              break;
+
+            case 'bean':
+              $e = $entity;
+              $etype = $type;
+              $ebundle = $bundle;
+              $eid = $id;
+              $title = $entity->label;
+              break;
+
+            default:
+              $e = $entity;
+              $etype = $type;
+              $ebundle = $bundle;
+              $eid = $id;
+              $title = $entity->title;
+              break;
+          }
+
+          $path = entity_uri($etype, $e);
+          $e_info = entity_get_info($etype);
+          $rows[$eid] = array(
+            'Entity' => l(t($title), $path['path']),
+            'Field' => $field_name,
+            'Entity Type' => $e_info['label'],
+            'Bundle' => $e_info['bundles'][$ebundle]['label'],
+          );
+        }
+      }
+    }
+  }
+  return $rows;
+}
+
+function stanford_alt_check_sort_rows($a, $b) {
+  $get = drupal_get_query_parameters($_GET);
+  if (isset($get['order']) && isset($a[$get['order']]) && isset($b[$get['order']])) {
+    if (!isset($get['sort']) || $get['sort'] == 'asc') {
+      return strcmp(strip_tags($a[$get['order']]), strip_tags($b[$get['order']]));
+    }
+    else {
+      return strcmp(strip_tags($b[$get['order']]), strip_tags($a[$get['order']]));
+    }
+  }
+  return strcmp(strip_tags($a[key($a)]), strip_tags($b[key($b)]));
 }

@@ -14,7 +14,7 @@
  * @return string
  *   Rendered html.
  */
-function theme_stanford_alt_check_images($vars) {
+function theme_stanford_alt_check_image_uploads($vars) {
   $form = $vars['form'];
 
   $header = array(
