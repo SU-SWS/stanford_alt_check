@@ -98,7 +98,7 @@ function stanford_alt_check_image_uploads($form, &$form_state) {
  * @param array $form_state
  *   Form state array.
  */
-function stanford_alt_check_images_submit($form, &$form_state) {
+function stanford_alt_check_image_uploads_submit($form, &$form_state) {
   $i = 0;
   foreach ($form_state['values']['images'] as $field_name => $types) {
     foreach ($types as $type => $entity_ids) {
