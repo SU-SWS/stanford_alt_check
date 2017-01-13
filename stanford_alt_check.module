@@ -96,26 +96,21 @@ function stanford_alt_check_image_wysiwyg() {
         $field_instance = field_info_instance($type, $field_name, $bundle);
 
         foreach ($entities as $entity) {
-          // Field Collection Items. Change which entity we are referring to.
-          if (method_exists($entity, 'hostEntity')) {
-            $type = $entity->hostEntityType();
-            $bundle = $entity->hostEntityBundle();
-            $entity = $entity->hostEntity();
-          }
+          list($e, $t, , , $ebundle) = stanford_alt_check_get_host($entity, $type);
 
           // Beans use label property as the identifier.
-          if ($type == 'bean') {
-            $title = $entity->label;
+          if ($t == 'bean') {
+            $title = $e->label;
           }
           else {
-            $title = $entity->title;
+            $title = $e->title;
           }
 
-          $entity_info = entity_get_info($type);
-          $uri = entity_uri($type, $entity);
+          $entity_info = entity_get_info($t);
+          $uri = entity_uri($t, $e);
 
           // Check if the entity has a standard edit path & user has access.
-          if (drupal_valid_path($uri['path'] . '/edit') && entity_access('update', $type, $entity)) {
+          if (drupal_valid_path($uri['path'] . '/edit') && entity_access('update', $t, $e)) {
             $uri['path'] = $uri['path'] . '/edit';
           }
 
@@ -128,7 +123,7 @@ function stanford_alt_check_image_wysiwyg() {
             'Entity' => l(t($title), $uri['path']),
             'Field' => $field_instance['label'],
             'Type' => $entity_info['label'],
-            'Bundle' => $entity_info['bundles'][$bundle]['label'],
+            'Bundle' => $entity_info['bundles'][$ebundle]['label'],
           );
         }
       }
@@ -300,51 +295,24 @@ function stanford_alt_check_build_rows($data, $rows = array()) {
         $field_name = $field_instance['label'];
 
         foreach ($entities as $id => $entity) {
-          switch ($type) {
-            case 'field_collection_item':
-              // Field Collections. Get the data about the host entity.
-              $eid = $entity->hostEntityId();
-              $e = $entity->hostEntity();
-              $etype = $entity->hostEntityType();
-              $ebundle = $entity->hostEntityBundle();
-              if ($etype == 'bean') {
-                $title = $e->label;
-              }
-              else {
-                $title = $e->title;
-              }
-
-              break;
-
-            case 'bean':
-              // Beans don't use the title to describe them.
-              $e = $entity;
-              $etype = $type;
-              $ebundle = $bundle;
-              $eid = $id;
-              $title = $entity->label;
-              break;
-
-            default:
-              // Nodes, Users and other standard entities.
-              $e = $entity;
-              $etype = $type;
-              $ebundle = $bundle;
-              $eid = $id;
-              $title = $entity->title;
-              break;
+          list($e, $t, $eid, , $ebundle) = stanford_alt_check_get_host($entity, $type);
+          if ($t == 'bean') {
+            $title = $e->label;
+          }
+          else {
+            $title = $e->title;
           }
 
-          $path = entity_uri($etype, $e);
-          $e_info = entity_get_info($etype);
+          $path = entity_uri($t, $e);
+          $e_info = entity_get_info($t);
 
           // Concat other fields to the field list.
-          if (isset($rows["$etype-$eid"])) {
-            $efields = explode('; ', $rows["$etype-$eid"]['Field']);
+          if (isset($rows["$t-$eid"])) {
+            $efields = explode('; ', $rows["$t-$eid"]['Field']);
             if (!in_array($field_name, $efields)) {
               $efields[] = $field_name;
             }
-            $rows["$etype-$eid"]['Field'] = implode('; ', $efields);
+            $rows["$t-$eid"]['Field'] = implode('; ', $efields);
           }
           else {
             // Build row with first field.
@@ -387,4 +355,48 @@ function stanford_alt_check_sort_rows($a, $b) {
 
   // Fallback: sort by first element of each array.
   return strcmp(strip_tags($a[key($a)]), strip_tags($b[key($b)]));
+}
+
+/**
+ * Recursive function that will continue down to the greates host entity.
+ *
+ * @param object $entity
+ *   The actual entity to get host data from.
+ * @param string $type
+ *   The type of the entity we are inspecting.
+ *
+ * @return array
+ *   Keyed array of the entity type and the host entity.
+ */
+function stanford_alt_check_get_host($entity, $type) {
+  switch ($type) {
+    case 'field_collection_item':
+      // Field Collection entities: Change $t & $e to host entity.
+      $e = $entity->hostEntity();
+      $t = $entity->hostEntityType();
+      list($e, $t) = stanford_alt_check_get_host($e, $t);
+      break;
+
+    case 'paragraphs_item':
+      // Paragraph Item entities: Change $t & $e to host entity.
+      // We use field query because the
+      // ParagraphsItemEntity::hostEntityType() &
+      // ParagraphsItemEntity::hostEntity() do not always work.
+      $query = new EntityFieldQuery();
+      $query->fieldCondition($entity->field_name, 'value', $entity->item_id);
+      $results = $query->execute();
+      $types = array_keys($results);
+      $t = reset($types);
+      $es = entity_load($t, array_keys($results[$t]));
+      $e = reset($es);
+      list($e, $t) = stanford_alt_check_get_host($e, $t);
+      break;
+
+    default:
+      $t = $type;
+      $e = $entity;
+      break;
+  }
+  list($id, $vid, $bundle) = entity_extract_ids($t, $e);
+  return array($e, $t, $id, $vid, $bundle);
 }
