@@ -8,23 +8,23 @@
 /**
  * Implements hook_install().
  */
-function stanford_module_install() {
+function stanford_alt_check_install() {
 }
 
 /**
  * Implements hook_enable().
  */
-function stanford_module_enable() {
+function stanford_alt_check_enable() {
 }
 
 /**
  * Implements hook_disable().
  */
-function stanford_module_disable() {
+function stanford_alt_check_disable() {
 }
 
 /**
  * Implements hook_uninstall().
  */
-function stanford_module_uninstall() {
+function stanford_alt_check_uninstall() {
 }
