@@ -1,7 +1,7 @@
 name = Stanford Alt Checks
 description = Provides a user interface to check for image alt attributes.
 core = 7.x
-version = 7.x-1.0-alpha1
+version = 7.x-1.0-dev
 package = Stanford
 
 files[] = stanford_alt_check.theme.inc
