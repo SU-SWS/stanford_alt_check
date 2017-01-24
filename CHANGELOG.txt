@@ -1,6 +1,7 @@
 Stanford Alt Check Module
 
-Version 7.x-1.0                                                       2017-01-03
+Version 7.x-1.0-alpha1                                                2017-01-24
 --------------------------------------------------------------------------------
 
-- Initial Release
+- Initial Release!
+- Awesome functionality!
