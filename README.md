@@ -4,14 +4,18 @@
 Maintainers: [pookmish](https://github.com/pookmish), [jbickar](https://github.com/jbickar), [sherakama](https://github.com/sherakama)
 [Changelog.txt](CHANGELOG.txt)
 
-The Stanford Module feature is used to ...
+The Stanford Module feature is used to view and edit images that are missing alt texts. Image alt texts are a 
+requirement as seen [here](https://www.w3.org/TR/WCAG20-TECHS/H37.html).
 
 
 Installation
 ---
 
 1. Install this module like any other module. [See Drupal Documentation](https://drupal.org/documentation/install/modules-themes/modules-7)
-2. Navigate to admin/content/images
+2. Navigate to admin/content/images - This page displays all images in image fields. It also provides an easy form to
+ edit the alt text directly without viewing the entity.
+3. Navigate to admin/content/images/wysiwyg - This page displays all entities that have images in wysiwyg fields that 
+ are missing alt texts. You can then view the entity and edit the alt text directly.
 
 Configuration
 ---

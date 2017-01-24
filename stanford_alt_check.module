@@ -96,7 +96,10 @@ function stanford_alt_check_image_wysiwyg() {
         $field_instance = field_info_instance($type, $field_name, $bundle);
 
         foreach ($entities as $entity) {
-          list($e, $t, , , $ebundle) = stanford_alt_check_get_host($entity, $type);
+          if (!($item = stanford_alt_check_get_host($entity, $type))) {
+            continue;
+          }
+          list($e, $t, , , $ebundle) = $item;
 
           // Beans use label property as the identifier.
           if ($t == 'bean') {
@@ -230,6 +233,7 @@ function stanford_alt_check_upload_entities() {
     $query = new EntityFieldQuery();
     $query->fieldCondition($field['field_name'], 'alt', '', '=');
     $results = $query->execute();
+
     foreach ($results as $type => $result_entities) {
       foreach (entity_load($type, array_keys($result_entities)) as $entity) {
         list($id, , $bundle) = entity_extract_ids($type, $entity);
@@ -287,7 +291,7 @@ function stanford_alt_check_images() {
  * @return array
  *   Simple array to be used in tables.
  */
-function stanford_alt_check_build_rows($data, $rows = array()) {
+function stanford_alt_check_build_rows(array $data, array $rows = array()) {
   foreach ($data as $field_name => $types) {
     foreach ($types as $type => $bundles) {
       foreach ($bundles as $bundle => $entities) {
@@ -295,7 +299,10 @@ function stanford_alt_check_build_rows($data, $rows = array()) {
         $field_name = $field_instance['label'];
 
         foreach ($entities as $id => $entity) {
-          list($e, $t, $eid, , $ebundle) = stanford_alt_check_get_host($entity, $type);
+          if (!($item = stanford_alt_check_get_host($entity, $type))) {
+            continue;
+          }
+          list($e, $t, $eid, , $ebundle) = $item;
           if ($t == 'bean') {
             $title = $e->label;
           }
@@ -341,7 +348,7 @@ function stanford_alt_check_build_rows($data, $rows = array()) {
  * @return int
  *   Order of the two arrays.
  */
-function stanford_alt_check_sort_rows($a, $b) {
+function stanford_alt_check_sort_rows(array $a, array $b) {
   $get = drupal_get_query_parameters($_GET);
 
   // Check if we are to order specifically and if the keys exist to order on.
@@ -365,16 +372,20 @@ function stanford_alt_check_sort_rows($a, $b) {
  * @param string $type
  *   The type of the entity we are inspecting.
  *
- * @return array
- *   Keyed array of the entity type and the host entity.
+ * @return array|bool
+ *   Array of host entity data or FALSE if it fails to obtain host.
  */
 function stanford_alt_check_get_host($entity, $type) {
+  $e = $t = NULL;
   switch ($type) {
     case 'field_collection_item':
       // Field Collection entities: Change $t & $e to host entity.
       $e = $entity->hostEntity();
       $t = $entity->hostEntityType();
-      list($e, $t) = stanford_alt_check_get_host($e, $t);
+      if (!($item = stanford_alt_check_get_host($e, $t))) {
+        return FALSE;
+      }
+      list($e, $t) = $item;
       break;
 
     case 'paragraphs_item':
@@ -384,12 +395,16 @@ function stanford_alt_check_get_host($entity, $type) {
       // ParagraphsItemEntity::hostEntity() do not always work.
       $query = new EntityFieldQuery();
       $query->fieldCondition($entity->field_name, 'value', $entity->item_id);
-      $results = $query->execute();
-      $types = array_keys($results);
-      $t = reset($types);
-      $es = entity_load($t, array_keys($results[$t]));
-      $e = reset($es);
-      list($e, $t) = stanford_alt_check_get_host($e, $t);
+      if ($results = $query->execute()) {
+        $types = array_keys($results);
+        $t = reset($types);
+        $es = entity_load($t, array_keys($results[$t]));
+        $e = reset($es);
+        if (!($item = stanford_alt_check_get_host($e, $t))) {
+          return FALSE;
+        }
+        list($e, $t) = $item;
+      }
       break;
 
     default:
@@ -397,6 +412,10 @@ function stanford_alt_check_get_host($entity, $type) {
       $e = $entity;
       break;
   }
-  list($id, $vid, $bundle) = entity_extract_ids($t, $e);
-  return array($e, $t, $id, $vid, $bundle);
+
+  if ($e && $t) {
+    list($id, $vid, $bundle) = entity_extract_ids($t, $e);
+    return array($e, $t, $id, $vid, $bundle);
+  }
+  return FALSE;
 }

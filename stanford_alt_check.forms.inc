@@ -16,7 +16,7 @@
  * @return array
  *   Renderable form array.
  */
-function stanford_alt_check_image_uploads($form, &$form_state) {
+function stanford_alt_check_image_uploads(array $form, array &$form_state) {
   drupal_set_title(t("Image Uploads"));
   $form = array();
   $form['#tree'] = TRUE;
@@ -37,11 +37,16 @@ function stanford_alt_check_image_uploads($form, &$form_state) {
               // Display the image for quick reference.
               $image_url = image_style_url('thumbnail', $image['uri']);
               $image_full_url = file_create_url($image['uri']);
-              $form['images'][$field][$type][$id][$image['fid']]['image'] = array(
+
+              $image_row = array();
+              $image_row['image'] = array(
                 '#markup' => "<a href='$image_full_url' target='_blank'><img src='$image_url' /></a>",
               );
 
-              list($e, $t) = stanford_alt_check_get_host($entity, $type);
+              if (!($item = stanford_alt_check_get_host($entity, $type))) {
+                continue;
+              }
+              list($e, $t) = $item;
 
               $title = $e->title;
               // Beans use the label property as the identifier.
@@ -55,21 +60,23 @@ function stanford_alt_check_image_uploads($form, &$form_state) {
 
               // Check if user has access to update the entity displayed.
               if (entity_access('update', $t)) {
-                $form['images'][$field][$type][$id][$image['fid']]['alt'] = array(
+                $image_row['alt'] = array(
                   '#type' => 'textfield',
                   '#title' => t('Alt Text for %filename', array('%filename' => $image['filename'])),
                 );
               }
               else {
-                $form['images'][$field][$type][$id][$image['fid']]['alt'] = array(
+                $image_row['alt'] = array(
                   '#markup' => t('Permission Not Allowed.'),
                 );
               }
 
               $entity_uri = entity_uri($t, $e);
-              $form['images'][$field][$type][$id][$image['fid']]['entity_uri'] = array(
+              $image_row['entity_uri'] = array(
                 '#markup' => l(t($title), $entity_uri['path']),
               );
+
+              $form['images'][$field][$type][$id][$image['fid']] = $image_row;
             }
           }
         }
@@ -91,7 +98,7 @@ function stanford_alt_check_image_uploads($form, &$form_state) {
  * @param array $form_state
  *   Form state array.
  */
-function stanford_alt_check_image_uploads_submit($form, &$form_state) {
+function stanford_alt_check_image_uploads_submit(array $form, array &$form_state) {
   $i = 0;
   foreach ($form_state['values']['images'] as $field_name => $types) {
     foreach ($types as $type => $entity_ids) {
