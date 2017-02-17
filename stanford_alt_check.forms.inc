@@ -28,55 +28,10 @@ function stanford_alt_check_image_uploads(array $form, array &$form_state) {
         foreach ($entities as $id => $entity) {
           if ($images = field_get_items($type, $entity, $field)) {
             foreach ($images as $image) {
-
-              // Alt is populated.
-              if ($image['alt']) {
-                continue;
+              $image_row = stanford_alt_check_get_image_form($image, $entity, $type);
+              if ($image_row) {
+                $form['images'][$field][$type][$id][$image['fid']] = $image_row;
               }
-
-              // Display the image for quick reference.
-              $image_url = image_style_url('thumbnail', $image['uri']);
-              $image_full_url = file_create_url($image['uri']);
-
-              $image_row = array();
-              $image_row['image'] = array(
-                '#markup' => "<a href='$image_full_url' target='_blank'><img src='$image_url' /></a>",
-              );
-
-              if (!($item = stanford_alt_check_get_host($entity, $type))) {
-                continue;
-              }
-              list($e, $t) = $item;
-
-              $title = $e->title;
-              // Beans use the label property as the identifier.
-              if ($t == 'bean') {
-                $title = $e->label;
-              }
-
-              if (strlen($title) > 50) {
-                $title = substr($title, 0, 50) . "...";
-              }
-
-              // Check if user has access to update the entity displayed.
-              if (entity_access('update', $t)) {
-                $image_row['alt'] = array(
-                  '#type' => 'textfield',
-                  '#title' => t('Alt Text for %filename', array('%filename' => $image['filename'])),
-                );
-              }
-              else {
-                $image_row['alt'] = array(
-                  '#markup' => t('Permission Not Allowed.'),
-                );
-              }
-
-              $entity_uri = entity_uri($t, $e);
-              $image_row['entity_uri'] = array(
-                '#markup' => l(t($title), $entity_uri['path']),
-              );
-
-              $form['images'][$field][$type][$id][$image['fid']] = $image_row;
             }
           }
         }
@@ -91,6 +46,86 @@ function stanford_alt_check_image_uploads(array $form, array &$form_state) {
 }
 
 /**
+ * Process the image array to build the form components necessary.
+ *
+ * @param array $image
+ *   Field file array.
+ * @param object $entity
+ *   Entity Object.
+ * @param string $type
+ *   Entity type.
+ *
+ * @return array|bool
+ *   Form elements or FALSE if can't get the host entity.
+ */
+function stanford_alt_check_get_image_form(array $image, $entity, $type) {
+  // Display the image for quick reference.
+  $image_url = image_style_url('thumbnail', $image['uri']);
+  $image_full_url = file_create_url($image['uri']);
+
+  $image_row = array();
+  $image_row['image'] = array(
+    '#markup' => "<a href='$image_full_url' target='_blank'><img src='$image_url' /></a>",
+  );
+
+  if (!($item = stanford_alt_check_get_host($entity, $type))) {
+    return FALSE;
+  }
+  list($host_entity, $host_type) = $item;
+
+  $title = $host_entity->title;
+  // Beans use the label property as the identifier.
+  if ($host_type == 'bean') {
+    $title = $host_entity->label;
+  }
+
+  if (strlen($title) > 50) {
+    $title = substr($title, 0, 50) . "...";
+  }
+
+  // Check if user has access to update the entity displayed.
+  if (entity_access('update', $host_type)) {
+    $image_row['alt'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Alt Text for %filename', array('%filename' => $image['filename'])),
+      '#default_value' => $image['alt'] ? $image['alt'] : '',
+    );
+  }
+  else {
+    $image_row['alt'] = array(
+      '#markup' => t('Permission Not Allowed.'),
+    );
+  }
+
+  $entity_uri = entity_uri($host_type, $host_entity);
+  $image_row['entity_uri'] = array(
+    '#markup' => l(t($title), $entity_uri['path']),
+  );
+
+  // Published or not.
+  if (isset($host_entity->status)) {
+    $image_row['entity_status'] = array(
+      '#markup' => $host_entity->status ? t('Yes') : t('No'),
+    );
+  }
+  else {
+    $image_row['entity_status'] = array(
+      '#markup' => t('Yes'),
+    );
+  }
+
+  // Last changed interval.
+  $image_row['changed'] = array(
+    '#markup' => t('!interval Ago', array('!interval' => format_interval(time() - $host_entity->changed))),
+  );
+  $image_row['changed_stamp'] = array(
+    '#markup' => $host_entity->changed,
+  );
+
+  return $image_row;
+}
+
+/**
  * Alt check images submit handler to save entities with new alt attributes.
  *
  * @param array $form
@@ -99,12 +134,12 @@ function stanford_alt_check_image_uploads(array $form, array &$form_state) {
  *   Form state array.
  */
 function stanford_alt_check_image_uploads_submit(array $form, array &$form_state) {
-  $i = 0;
+  $num_changed = 0;
   foreach ($form_state['values']['images'] as $field_name => $types) {
     foreach ($types as $type => $entity_ids) {
       foreach ($entity_ids as $entity_id => $files) {
         foreach ($files as $fid => $alt) {
-          if ($alt['alt']) {
+          if ($form['images'][$field_name][$type][$entity_id][$fid]['alt']['#default_value'] !== $alt['alt']) {
             $entities_array = entity_load($type, array($entity_id));
             $entity = reset($entities_array);
             $field_items = &$entity->{$field_name}[LANGUAGE_NONE];
@@ -114,12 +149,12 @@ function stanford_alt_check_image_uploads_submit(array $form, array &$form_state
               }
             }
             entity_save($type, $entity);
-            $i++;
+            $num_changed++;
           }
         }
       }
     }
   }
 
-  drupal_set_message(t('Alt Attributes saved for !num images', array('!num' => $i)));
+  drupal_set_message(t('Alt Attributes updated for !num images', array('!num' => $num_changed)));
 }

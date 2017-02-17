@@ -18,26 +18,47 @@ function theme_stanford_alt_check_image_uploads(array $vars) {
   $form = $vars['form'];
 
   $header = array(
-    t('Image'),
-    t('Entity'),
-    t('Alt Attribute'),
+    array('data' => t('Image')),
+    array('data' => t('Entity'), 'field' => 'Entity'),
+    array('data' => t('Published'), 'field' => 'Published'),
+    array('data' => t('Alt Attribute'), 'field' => 'Alt Attribute'),
+    array('data' => t('Last Changed'), 'field' => 'Last Changed'),
   );
+
   $rows = array();
   foreach (element_children($form['images']) as $field_name) {
     foreach (element_children($form['images'][$field_name]) as $type) {
       foreach (element_children($form['images'][$field_name][$type]) as $entity_id) {
         foreach (element_children($form['images'][$field_name][$type][$entity_id]) as $fid) {
           $rows[] = array(
-            drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['image']),
-            drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['entity_uri']),
-            drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['alt']),
+            'Image' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['image']),
+            'Entity' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['entity_uri']),
+            'Published' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['entity_status']),
+
+            // Sets two alts for sorting simplicity.
+            'Alt Attribute' => $form['images'][$field_name][$type][$entity_id][$fid]['alt']['#default_value'],
+            'Alt Form' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['alt']),
+
+            // Sets two changed for sorting simplicity.
+            'Changed' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['changed']),
+            'Last Changed' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['changed_stamp']),
           );
         }
       }
     }
   }
-  $current_page = pager_default_initialize(count($rows), 10);
-  $chunks = array_chunk($rows, 10, TRUE);
+
+  // Sort then unset columns used only for sorting.
+  usort($rows, 'stanford_alt_check_sort_rows');
+  foreach ($rows as &$row) {
+    unset($row['Alt Attribute']);
+    unset($row['Last Changed']);
+  }
+
+  // Pager.
+  $num_per_page = 25;
+  $current_page = pager_default_initialize(count($rows), $num_per_page);
+  $chunks = array_chunk($rows, $num_per_page, TRUE);
 
   $table_vars = array(
     'header' => $header,

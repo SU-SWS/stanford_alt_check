@@ -141,7 +141,7 @@ function stanford_alt_check_image_wysiwyg() {
   $chunks = array_chunk($rows, 125, TRUE);
 
   $output['message'] = array(
-    '#markup' => t('<p>Below are a list of entities that have an image embeded in html with a missing ALT attribute. Please view and edit the entity directly to correct these errors.</p>')
+    '#markup' => t('<p>Below are a list of entities that have an image embeded in html with a missing ALT attribute. Please view and edit the entity directly to correct these errors.</p>'),
   );
   $output['table'] = array(
     '#theme' => 'table',
@@ -169,7 +169,6 @@ function stanford_alt_check_get_wysiwyg() {
   $image_fields = array();
   $wywisyg_field_types = array('text', 'text_long', 'text_with_summary');
   foreach (field_info_fields() as $field) {
-    $types[$field['type']] = $field['type'];
     if (in_array($field['type'], $wywisyg_field_types)) {
       foreach ($field['bundles'] as $type => $bundles) {
         foreach ($bundles as $bundle) {
@@ -231,7 +230,7 @@ function stanford_alt_check_upload_entities() {
   // Gets all entities where the image alt attribute is missing.
   foreach ($image_fields as $field) {
     $query = new EntityFieldQuery();
-    $query->fieldCondition($field['field_name'], 'alt', '', '=');
+    $query->fieldCondition($field['field_name'], 'fid', '0', '>=');
     $results = $query->execute();
 
     foreach ($results as $type => $result_entities) {
@@ -253,7 +252,7 @@ function stanford_alt_check_upload_entities() {
 function stanford_alt_check_images() {
   $output = array();
   $output['message'] = array(
-    '#markup' => t('<p>Below are a list of entities that have an image with a missing ALT attribute. Please view and edit the entity to correct these errors.</p>')
+    '#markup' => t('<p>Below are a list of entities that have an image with a missing ALT attribute. Please view and edit the entity to correct these errors.</p>'),
   );
   $rows = stanford_alt_check_build_rows(stanford_alt_check_get_wysiwyg());
   $rows = stanford_alt_check_build_rows(stanford_alt_check_upload_entities(), $rows);
@@ -298,7 +297,7 @@ function stanford_alt_check_build_rows(array $data, array $rows = array()) {
         $field_instance = field_info_instance($type, $field_name, $bundle);
         $field_name = $field_instance['label'];
 
-        foreach ($entities as $id => $entity) {
+        foreach ($entities as $entity) {
           if (!($item = stanford_alt_check_get_host($entity, $type))) {
             continue;
           }
@@ -340,28 +339,28 @@ function stanford_alt_check_build_rows(array $data, array $rows = array()) {
 /**
  * Sort function to sort arrays with strings based on GET parameters.
  *
- * @param array $a
+ * @param array $array_a
  *   Array 1 to compare.
- * @param array $b
+ * @param array $array_b
  *   Array 2 to compare.
  *
  * @return int
  *   Order of the two arrays.
  */
-function stanford_alt_check_sort_rows(array $a, array $b) {
+function stanford_alt_check_sort_rows(array $array_a, array $array_b) {
   $get = drupal_get_query_parameters($_GET);
 
   // Check if we are to order specifically and if the keys exist to order on.
-  if (isset($get['order']) && isset($a[$get['order']]) && isset($b[$get['order']])) {
+  if (isset($get['order']) && isset($array_a[$get['order']]) && isset($array_b[$get['order']])) {
     // Which direction.
     if (!isset($get['sort']) || $get['sort'] == 'asc') {
-      return strcmp(strip_tags($a[$get['order']]), strip_tags($b[$get['order']]));
+      return strcmp(strip_tags($array_a[$get['order']]), strip_tags($array_b[$get['order']]));
     }
-    return strcmp(strip_tags($b[$get['order']]), strip_tags($a[$get['order']]));
+    return strcmp(strip_tags($array_b[$get['order']]), strip_tags($array_a[$get['order']]));
   }
 
   // Fallback: sort by first element of each array.
-  return strcmp(strip_tags($a[key($a)]), strip_tags($b[key($b)]));
+  return strcmp(strip_tags($array_a[key($array_a)]), strip_tags($array_b[key($array_b)]));
 }
 
 /**
@@ -376,20 +375,21 @@ function stanford_alt_check_sort_rows(array $a, array $b) {
  *   Array of host entity data or FALSE if it fails to obtain host.
  */
 function stanford_alt_check_get_host($entity, $type) {
-  $e = $t = NULL;
+  $host_entity = $host_type = NULL;
   switch ($type) {
     case 'field_collection_item':
-      // Field Collection entities: Change $t & $e to host entity.
-      $e = $entity->hostEntity();
-      $t = $entity->hostEntityType();
-      if (!($item = stanford_alt_check_get_host($e, $t))) {
+      // Field Collection entities: Change $host_type & $host_entity to host
+      // entity.
+      $host_entity = $entity->hostEntity();
+      $host_type = $entity->hostEntityType();
+      if (!($item = stanford_alt_check_get_host($host_entity, $host_type))) {
         return FALSE;
       }
-      list($e, $t) = $item;
+      list($host_entity, $host_type) = $item;
       break;
 
     case 'paragraphs_item':
-      // Paragraph Item entities: Change $t & $e to host entity.
+      // Paragraph Item entities: Change $host_type& $host_entityto host entity.
       // We use field query because the
       // ParagraphsItemEntity::hostEntityType() &
       // ParagraphsItemEntity::hostEntity() do not always work.
@@ -397,25 +397,25 @@ function stanford_alt_check_get_host($entity, $type) {
       $query->fieldCondition($entity->field_name, 'value', $entity->item_id);
       if ($results = $query->execute()) {
         $types = array_keys($results);
-        $t = reset($types);
-        $es = entity_load($t, array_keys($results[$t]));
-        $e = reset($es);
-        if (!($item = stanford_alt_check_get_host($e, $t))) {
+        $host_type = reset($types);
+        $entity_loaded = entity_load($host_type, array_keys($results[$host_type]));
+        $host_entity = reset($entity_loaded);
+        if (!($item = stanford_alt_check_get_host($host_entity, $host_type))) {
           return FALSE;
         }
-        list($e, $t) = $item;
+        list($host_entity, $host_type) = $item;
       }
       break;
 
     default:
-      $t = $type;
-      $e = $entity;
+      $host_type = $type;
+      $host_entity = $entity;
       break;
   }
 
-  if ($e && $t) {
-    list($id, $vid, $bundle) = entity_extract_ids($t, $e);
-    return array($e, $t, $id, $vid, $bundle);
+  if ($host_entity && $host_type) {
+    list($entity_id, $vid, $bundle) = entity_extract_ids($host_type, $host_entity);
+    return array($host_entity, $host_type, $entity_id, $vid, $bundle);
   }
   return FALSE;
 }
