@@ -21,6 +21,20 @@ function stanford_alt_check_image_uploads(array $form, array &$form_state) {
   $form = array();
   $form['#tree'] = TRUE;
 
+  $form['filter'] = array(
+    '#type' => 'select',
+    '#title' => t('Images'),
+    '#options' => array(
+      'all' => t('All'),
+      'empty' => t('Images with empty alt'),
+      'filled' => t('Images with filled in alt'),
+    ),
+    '#ajax' => array(
+      'callback' => 'stanford_alt_check_image_wysiwyg_submit',
+    ),
+  );
+
+  // todo: add filtering of empty/filled images
   $image_entities = stanford_alt_check_upload_entities();
   foreach ($image_entities as $field => $types) {
     foreach ($types as $type => $bundles) {
@@ -87,6 +101,20 @@ function stanford_alt_check_image_wysiwyg($form, &$form_state) {
   $form = array();
   $form['#tree'] = TRUE;
 
+  $form['filter'] = array(
+    '#type' => 'select',
+    '#title' => t('Images'),
+    '#options' => array(
+      'all' => t('All'),
+      'empty' => t('Images with empty alt'),
+      'filled' => t('Images with filled in alt'),
+    ),
+    '#ajax' => array(
+      'callback' => 'stanford_alt_check_image_wysiwyg_submit',
+    ),
+  );
+
+  // todo: add filtering of empty/filled images
   $image_entities = stanford_alt_check_get_wysiwyg();
   foreach ($image_entities as $field => $types) {
     foreach ($types as $type => $bundles) {

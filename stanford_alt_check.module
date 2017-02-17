@@ -90,10 +90,16 @@ function stanford_alt_check_theme($existing, $type, $theme, $path) {
 /**
  * Gets all entities with missing wywisyg image alts.
  *
+ * @param string $filter
+ *   Choose which items to include.
+ *   - all: give all images
+ *   - empty: only those with empty alts
+ *   - filled: only those with populated alts.
+ *
  * @return array
  *   Entities with missing alt attributes in wysiwyg fields.
  */
-function stanford_alt_check_get_wysiwyg() {
+function stanford_alt_check_get_wysiwyg($filter = 'all') {
   $image_fields = stanford_alt_check_get_wysiwyg_fields();
   $return_data = array();
   foreach ($image_fields as $field) {
@@ -113,6 +119,17 @@ function stanford_alt_check_get_wysiwyg() {
         list(, , $bundle) = entity_extract_ids($type, $entity);
         foreach ($field_items as $delta => $item) {
           if ($images = stanford_alt_check_get_wysiwyg_images($item)) {
+
+            // If filtering, unset the appropriate items.
+            foreach ($images as $key => $image) {
+              if ($filter == 'empty' && $image['alt']) {
+                unset($images[$key]);
+              }
+              elseif ($filter == 'filled' && !$image['alt']) {
+                unset($images[$key]);
+              }
+            }
+
             $return_data[$field['field_name']][$type][$bundle][$id][$delta] = $images;
           }
         }
@@ -199,6 +216,12 @@ function stanford_alt_check_get_wysiwyg_images(array $field_item) {
 /**
  * Gets the fields and entities with missing alt attributes.
  *
+ * @param string $filter
+ *   Choose which items to include.
+ *   - all: give all images
+ *   - empty: only those with empty alts
+ *   - filled: only those with populated alts.
+ *
  * @return array
  *   Keyed array of fields and entities with missing alt attributes.
  *   First set of array keys are the field machine name used. Second key is the
@@ -206,7 +229,7 @@ function stanford_alt_check_get_wysiwyg_images(array $field_item) {
  *   entity to be used.
  *   Ex. array('field_image' => array('node' => array(10 => [Node Object])))
  */
-function stanford_alt_check_upload_entities() {
+function stanford_alt_check_upload_entities($filter = 'all') {
   $image_fields = array();
   // Get all image type fields.
   foreach (field_info_fields() as $field) {
@@ -220,6 +243,15 @@ function stanford_alt_check_upload_entities() {
   foreach ($image_fields as $field) {
     $query = new EntityFieldQuery();
     $query->fieldCondition($field['field_name'], 'fid', '0', '>=');
+
+    // If filters a set, only grab appropriate items.
+    if ($filter == 'empty') {
+      $query->fieldCondition($field['field_name'], 'alt', '', '=');
+    }
+    elseif ($filter == 'filled') {
+      $query->fieldCondition($field['field_name'], 'alt', '', '!=');
+    }
+
     $results = $query->execute();
 
     foreach ($results as $type => $result_entities) {
