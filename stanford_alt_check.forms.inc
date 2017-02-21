@@ -7,35 +7,24 @@
 
 /**
  * Alt Check Images form callback.
- *
- * @param array $form
- *   Form.
- * @param array $form_state
- *   Form state.
- *
- * @return array
- *   Renderable form array.
  */
-function stanford_alt_check_image_uploads(array $form, array &$form_state) {
+function stanford_alt_check_image_uploads($form, &$form_state) {
+  if (module_exists('colorbox')) {
+    _colorbox_doheader();
+  }
+
   drupal_set_title(t("Image Uploads"));
   $form = array();
   $form['#tree'] = TRUE;
 
-  $form['filter'] = array(
-    '#type' => 'select',
-    '#title' => t('Images'),
-    '#options' => array(
-      'all' => t('All'),
-      'empty' => t('Images with empty alt'),
-      'filled' => t('Images with filled in alt'),
-    ),
-    '#ajax' => array(
-      'callback' => 'stanford_alt_check_image_wysiwyg_submit',
-    ),
-  );
+  $filter = '0';
+  $get = drupal_get_query_parameters($_GET);
+  if (isset($get['filter'])) {
+    $filter = $get['filter'];
+  }
+  $form += stanford_alt_check_filter_form($filter);
 
-  // todo: add filtering of empty/filled images
-  $image_entities = stanford_alt_check_upload_entities();
+  $image_entities = stanford_alt_check_upload_entities($filter);
   foreach ($image_entities as $field => $types) {
     foreach ($types as $type => $bundles) {
       foreach ($bundles as $entities) {
@@ -56,18 +45,14 @@ function stanford_alt_check_image_uploads(array $form, array &$form_state) {
     '#type' => 'submit',
     '#value' => t('Save'),
   );
+  $form['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
   return $form;
 }
 
 /**
  * Alt check images submit handler to save entities with new alt attributes.
- *
- * @param array $form
- *   Form array.
- * @param array $form_state
- *   Form state array.
  */
-function stanford_alt_check_image_uploads_submit(array $form, array &$form_state) {
+function stanford_alt_check_image_uploads_submit($form, &$form_state) {
   $changed = 0;
   foreach ($form_state['values']['images'] as $field_name => $types) {
     foreach ($types as $type => $entity_ids) {
@@ -97,25 +82,22 @@ function stanford_alt_check_image_uploads_submit(array $form, array &$form_state
  * Menu callback to display list of entities with missing alt attributes.
  */
 function stanford_alt_check_image_wysiwyg($form, &$form_state) {
+  if (module_exists('colorbox')) {
+    _colorbox_doheader();
+  }
+
   drupal_set_title(t("WYSIWYG Images"));
   $form = array();
   $form['#tree'] = TRUE;
 
-  $form['filter'] = array(
-    '#type' => 'select',
-    '#title' => t('Images'),
-    '#options' => array(
-      'all' => t('All'),
-      'empty' => t('Images with empty alt'),
-      'filled' => t('Images with filled in alt'),
-    ),
-    '#ajax' => array(
-      'callback' => 'stanford_alt_check_image_wysiwyg_submit',
-    ),
-  );
+  $filter = '0';
+  $get = drupal_get_query_parameters($_GET);
+  if (isset($get['filter'])) {
+    $filter = $get['filter'];
+  }
+  $form += stanford_alt_check_filter_form($filter);
 
-  // todo: add filtering of empty/filled images
-  $image_entities = stanford_alt_check_get_wysiwyg();
+  $image_entities = stanford_alt_check_get_wysiwyg($filter);
   foreach ($image_entities as $field => $types) {
     foreach ($types as $type => $bundles) {
       foreach ($bundles as $entities) {
@@ -138,7 +120,7 @@ function stanford_alt_check_image_wysiwyg($form, &$form_state) {
     '#type' => 'submit',
     '#value' => t('Save'),
   );
-
+  $form['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
   return $form;
 }
 
@@ -234,12 +216,17 @@ function stanford_alt_check_set_wysiwyg_alt(array &$field, $position, $alt) {
  */
 function stanford_alt_check_get_image_form_component(array $image, $entity, $type) {
   // Display the image for quick reference.
-  $image_url = image_style_url('thumbnail', $image['uri']);
+  if ($image['external']) {
+    $image_url = file_create_url($image['uri']);
+  }
+  else {
+    $image_url = image_style_url('thumbnail', $image['uri']);
+  }
   $image_full_url = file_create_url($image['uri']);
 
   $image_row = array();
   $image_row['image'] = array(
-    '#markup' => "<a href='$image_full_url' target='_blank'><img src='$image_url' /></a>",
+    '#markup' => "<a class=\"colorbox-load\" href='$image_full_url' target='_blank'><img class=\"alt-check-image\" src='$image_url' /></a>",
   );
 
   if (!($item = stanford_alt_check_get_host($entity, $type))) {
@@ -297,4 +284,63 @@ function stanford_alt_check_get_image_form_component(array $image, $entity, $typ
   );
 
   return $image_row;
+}
+
+/**
+ * Build the portion of the form for the filter.
+ *
+ * @param string $filter
+ *   Default value for the filter select list.
+ *
+ * @return array
+ *   Form components for the filter.
+ */
+function stanford_alt_check_filter_form($filter) {
+  $form = array();
+  $form['filter_form'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Filter'),
+  );
+  $form['filter_form']['filter'] = array(
+    '#type' => 'select',
+    '#title' => t('Images'),
+    '#options' => array(
+      '0' => t('All'),
+      'empty' => t('Images with empty alt'),
+      'filled' => t('Images with filled in alt'),
+    ),
+    '#default_value' => $filter,
+  );
+  $form['filter_form']['actions'] = array(
+    '#type' => 'actions',
+  );
+  $form['filter_form']['actions']['filter_submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Filter'),
+    '#name' => 'filter',
+    '#submit' => array('stanford_alt_check_form_filter'),
+  );
+  $form['filter_form']['actions']['filter_reset'] = array(
+    '#type' => 'submit',
+    '#value' => t('Reset'),
+    '#name' => 'reset',
+    '#submit' => array('stanford_alt_check_form_filter'),
+  );
+  return $form;
+}
+
+/**
+ * Filter form submit.
+ */
+function stanford_alt_check_form_filter($form, &$form_state) {
+  $get = drupal_get_query_parameters($_GET);
+  // If user click "Filter" and filter value is applicable.
+  if ($form_state['clicked_button']['#name'] == 'filter' && $form_state['values']['filter_form']['filter']) {
+    $get['filter'] = $form_state['values']['filter_form']['filter'];
+    $form_state['redirect'] = array(current_path(), array('query' => $get));
+  }
+  else {
+    unset($get['filter']);
+    $form_state['redirect'] = array(current_path(), array('query' => $get));
+  }
 }

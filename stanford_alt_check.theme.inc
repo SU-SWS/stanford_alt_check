@@ -18,7 +18,7 @@ function theme_stanford_alt_check_image_uploads(array $vars) {
   $form = $vars['form'];
   $header = array(
     array('data' => t('Image')),
-    array('data' => t('Entity'), 'field' => 'Entity'),
+    array('data' => t('Title'), 'field' => 'Title'),
     array('data' => t('Published'), 'field' => 'Published'),
     array('data' => t('Alt Attribute'), 'field' => 'Alt Attribute'),
     array('data' => t('Last Changed'), 'field' => 'Last Changed'),
@@ -31,7 +31,7 @@ function theme_stanford_alt_check_image_uploads(array $vars) {
         foreach (element_children($form['images'][$field_name][$type][$entity_id]) as $fid) {
           $rows[] = array(
             'Image' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['image']),
-            'Entity' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['entity_uri']),
+            'Title' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['entity_uri']),
             'Published' => drupal_render($form['images'][$field_name][$type][$entity_id][$fid]['entity_status']),
 
             // Sets two alts for sorting simplicity.
@@ -63,13 +63,14 @@ function theme_stanford_alt_check_image_uploads(array $vars) {
     'header' => $header,
     'rows' => $chunks[$current_page],
     'attributes' => array(),
-    'empty' => t('No empty alt attributes at this time.'),
+    'empty' => t('No images available at this time.'),
     'caption' => '',
     'colgroups' => array(),
     'sticky' => FALSE,
   );
 
-  $output = theme('table', $table_vars);
+  $output = render($form['filter_form']);
+  $output .= theme('table', $table_vars);
   $output .= theme('pager', array('quantity', count($rows)));
   $output .= drupal_render_children($form);
 
@@ -90,7 +91,7 @@ function theme_stanford_alt_check_image_wysiwyg(array $vars) {
 
   $header = array(
     array('data' => t('Image')),
-    array('data' => t('Entity'), 'field' => 'Entity'),
+    array('data' => t('Title'), 'field' => 'Title'),
     array('data' => t('Published'), 'field' => 'Published'),
     array('data' => t('Alt Attribute'), 'field' => 'Alt Attribute'),
     array('data' => t('Last Changed'), 'field' => 'Last Changed'),
@@ -105,7 +106,7 @@ function theme_stanford_alt_check_image_wysiwyg(array $vars) {
 
             $rows[] = array(
               'Image' => drupal_render($form['images'][$field_name][$type][$entity_id][$delta][$image_position]['image']),
-              'Entity' => drupal_render($form['images'][$field_name][$type][$entity_id][$delta][$image_position]['entity_uri']),
+              'Title' => drupal_render($form['images'][$field_name][$type][$entity_id][$delta][$image_position]['entity_uri']),
               'Published' => drupal_render($form['images'][$field_name][$type][$entity_id][$delta][$image_position]['entity_status']),
 
               // Sets two alts for sorting simplicity.
@@ -138,13 +139,14 @@ function theme_stanford_alt_check_image_wysiwyg(array $vars) {
     'header' => $header,
     'rows' => $chunks[$current_page],
     'attributes' => array(),
-    'empty' => t('No empty alt attributes at this time.'),
+    'empty' => t('No images available at this time.'),
     'caption' => '',
     'colgroups' => array(),
     'sticky' => FALSE,
   );
 
-  $output = theme('table', $table_vars);
+  $output = render($form['filter_form']);
+  $output .= theme('table', $table_vars);
   $output .= theme('pager', array('quantity', count($rows)));
   $output .= drupal_render_children($form);
 
