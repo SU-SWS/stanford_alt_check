@@ -22,46 +22,17 @@ function stanford_alt_check_menu() {
   $items['admin/content/images'] = array(
     'title' => "Images",
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('stanford_alt_check_image_uploads'),
+    'page arguments' => array('stanford_alt_check_form'),
     'file' => 'stanford_alt_check.forms.inc',
     'access arguments' => array('access content overview'),
     'type' => MENU_NORMAL_ITEM,
-  );
-  $items['admin/content/images/uploads'] = array(
-    'title' => "Image Uploads",
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-  );
-  $items['admin/content/images/wysiwyg'] = array(
-    'title' => "WYSIWYG Images",
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('stanford_alt_check_image_wysiwyg'),
-    'file' => 'stanford_alt_check.forms.inc',
-    'access arguments' => array('access content overview'),
-    'type' => MENU_LOCAL_TASK,
   );
 
   // Manage Content Menu Items.
   $items['admin/images'] = array(
     'title' => "Manage Images",
-    'page callback' => 'stanford_alt_check_manage_images',
-    'file' => 'stanford_alt_check.forms.inc',
-    'access arguments' => array('access content overview'),
-    'type' => MENU_NORMAL_ITEM,
-    'menu_name' => 'menu-manage-content-by-type',
-  );
-  $items['admin/images/uploads'] = array(
-    'title' => "Manage Image Uploads",
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('stanford_alt_check_image_uploads'),
-    'file' => 'stanford_alt_check.forms.inc',
-    'access arguments' => array('access content overview'),
-    'type' => MENU_NORMAL_ITEM,
-    'menu_name' => 'menu-manage-content-by-type',
-  );
-  $items['admin/images/wysiwyg'] = array(
-    'title' => "Manage WYSIWYG Images",
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('stanford_alt_check_image_wysiwyg'),
+    'page arguments' => array('stanford_alt_check_form'),
     'file' => 'stanford_alt_check.forms.inc',
     'access arguments' => array('access content overview'),
     'type' => MENU_NORMAL_ITEM,
@@ -76,342 +47,11 @@ function stanford_alt_check_menu() {
  */
 function stanford_alt_check_theme($existing, $type, $theme, $path) {
   return array(
-    'stanford_alt_check_image_uploads' => array(
-      'render element' => 'form',
-      'file' => 'stanford_alt_check.theme.inc',
-    ),
-    'stanford_alt_check_image_wysiwyg' => array(
+    'stanford_alt_check_form' => array(
       'render element' => 'form',
       'file' => 'stanford_alt_check.theme.inc',
     ),
   );
-}
-
-/**
- * Gets all entities with missing wywisyg image alts.
- *
- * @param string|null $filter
- *   Choose which items to include.
- *   - NULL: give all images
- *   - empty: only those with empty alts
- *   - filled: only those with populated alts.
- *
- * @return array
- *   Entities with missing alt attributes in wysiwyg fields.
- */
-function stanford_alt_check_get_wysiwyg($filter = NULL) {
-  $image_fields = stanford_alt_check_get_wysiwyg_fields();
-  $return_data = array();
-  foreach ($image_fields as $field) {
-
-    // Field query to find all image tags in html.
-    $query = new EntityFieldQuery();
-    $query->fieldCondition($field['field_name'], 'value', '%<img%', 'like');
-    $results = $query->execute();
-
-    foreach ($results as $type => $entities) {
-      foreach (entity_load($type, array_keys($entities)) as $id => $entity) {
-        $field_items = field_get_items($type, $entity, $field['field_name']);
-
-        // Empty field items.
-        if (!$field_items) {
-          continue;
-        }
-
-        // Get entity bundle for building the return data.
-        list(, , $bundle) = entity_extract_ids($type, $entity);
-        foreach ($field_items as $delta => $item) {
-          if ($images = stanford_alt_check_get_wysiwyg_images($item)) {
-
-            // If filtering, unset the appropriate items.
-            foreach ($images as $key => $image) {
-              if ($filter == 'empty' && $image['alt']) {
-                unset($images[$key]);
-              }
-              elseif ($filter == 'filled' && !$image['alt']) {
-                unset($images[$key]);
-              }
-            }
-
-            $return_data[$field['field_name']][$type][$bundle][$id][$delta] = $images;
-          }
-        }
-      }
-    }
-  }
-  return $return_data;
-}
-
-/**
- * Get all fields that have text_process as true.
- *
- * @return array
- *   All fields with possible html.
- */
-function stanford_alt_check_get_wysiwyg_fields() {
-  $fields = array();
-  $wywisyg_field_types = array('text', 'text_long', 'text_with_summary');
-  foreach (field_info_fields() as $field) {
-    if (in_array($field['type'], $wywisyg_field_types)) {
-      foreach ($field['bundles'] as $type => $bundles) {
-        foreach ($bundles as $bundle) {
-          $instance = field_info_instance($type, $field['field_name'], $bundle);
-
-          // HTML is available.
-          if ($instance['settings']['text_processing']) {
-            $fields[] = $field;
-          }
-        }
-      }
-    }
-  }
-  return $fields;
-}
-
-/**
- * Process the field item data to get all images in the html.
- *
- * @param array $field_item
- *   Field data array.
- *
- * @return array
- *   Keyed array of images with the key as the position of the image in html.
- */
-function stanford_alt_check_get_wysiwyg_images(array $field_item) {
-  $images = array();
-
-  $dom = new DOMDocument();
-  $dom->loadHTML($field_item['value']);
-  /** @var DOMElement $img_element */
-  foreach ($dom->getElementsByTagName('img') as $img_position => $img_element) {
-
-    // Parse the path to get the file uri.
-    $img_src = trim($img_element->getAttribute('src'), '/?');
-    if (strpos($img_src, '?') !== FALSE) {
-      $img_src = substr($img_src, 0, strpos($img_src, '?'));
-    }
-
-    $src_parts = parse_url($img_src);
-    global $base_url;
-
-    if (isset($src_parts['host']) && strpos($base_url, $src_parts['host']) === FALSE) {
-
-      // Image off site
-      $image_name = $img_src;
-    }
-    elseif (strpos($img_src, '/styles/') !== FALSE) {
-
-      // Image style derivative.
-      $src = explode('/', $img_src);
-      $style_pos = array_search('styles', $src);
-      $image_name = '//' . implode('/', array_slice($src, $style_pos + 3));
-    }
-    else {
-
-      // Original Image.
-      $image_name = str_replace(variable_get('file_private_path'), '', $img_src);
-      $image_name = str_replace(variable_get('file_public_path'), '', $image_name);
-      $image_name = "/$image_name";
-    }
-
-
-    // Try to find in the file managed table.
-    $fid = db_select('file_managed', 'f')
-      ->fields('f', array('fid'))
-      ->condition('uri', "%$image_name%", 'like')
-      ->execute()->fetchField();
-
-    if ($fid && ($image = file_load($fid))) {
-      $image->alt = $img_element->getAttribute('alt');
-      $image->external = FALSE;
-    }
-    else {
-      $image = array(
-        'uri' => $image_name,
-        'alt' => $img_element->getAttribute('alt'),
-        'external' => TRUE,
-      );
-    }
-    $images[$img_position] = (array) $image;
-  }
-  return $images;
-}
-
-/**
- * Gets the fields and entities with missing alt attributes.
- *
- * @param string|null $filter
- *   Choose which items to include.
- *   - NULL: give all images
- *   - empty: only those with empty alts
- *   - filled: only those with populated alts.
- *
- * @return array
- *   Keyed array of fields and entities with missing alt attributes.
- *   First set of array keys are the field machine name used. Second key is the
- *   entity type. Then 3rd key is the entity id. The value of the 3rd key is the
- *   entity to be used.
- *   Ex. array('field_image' => array('node' => array(10 => [Node Object])))
- */
-function stanford_alt_check_upload_entities($filter = NULL) {
-  $image_fields = array();
-  // Get all image type fields.
-  foreach (field_info_fields() as $field) {
-    if ($field['type'] == 'image') {
-      $image_fields[] = $field;
-    }
-  }
-
-  $return_data = array();
-  // Gets all entities where the image alt attribute is missing.
-  foreach ($image_fields as $field) {
-    $query = new EntityFieldQuery();
-    $query->fieldCondition($field['field_name'], 'fid', '0', '>=');
-
-    // If filters a set, only grab appropriate items.
-    if ($filter == 'empty') {
-      $query->fieldCondition($field['field_name'], 'alt', '', '=');
-    }
-    elseif ($filter == 'filled') {
-      $query->fieldCondition($field['field_name'], 'alt', '', '!=');
-    }
-
-    $results = $query->execute();
-
-    foreach ($results as $type => $result_entities) {
-      foreach (entity_load($type, array_keys($result_entities)) as $entity) {
-        list($id, , $bundle) = entity_extract_ids($type, $entity);
-        $return_data[$field['field_name']][$type][$bundle][$id] = $entity;
-      }
-    }
-  }
-  return $return_data;
-}
-
-/**
- * Menu callback to display all entities with missing alt attributes.
- *
- * @return array
- *   Render array with the table.
- */
-function stanford_alt_check_manage_images() {
-  $output = array();
-  $rows = stanford_alt_check_build_upload_overview();
-  $rows = stanford_alt_check_build_wysiwyg_overview($rows);
-  drupal_set_title(t('Manage Images'));
-
-  // Sort based on get parameters.
-  usort($rows, 'stanford_alt_check_sort_rows');
-  foreach ($rows as &$row) {
-    unset($row['Changed']);
-  }
-  // Pager.
-  $current_page = pager_default_initialize(count($rows), 25);
-  $chunks = array_chunk($rows, 25, TRUE);
-  $output['table'] = array(
-    '#theme' => 'table',
-    '#header' => array(
-      array('data' => t('Image')),
-      array('data' => t('Title'), 'field' => 'Title'),
-      array('data' => t('Published'), 'field' => 'Published'),
-      array('data' => t('Alt Attribute'), 'field' => 'Alt Attribute'),
-      array('data' => t('Last Changed'), 'field' => 'Last Changed'),
-    ),
-    '#rows' => $chunks[$current_page],
-  );
-  $output['pager'] = array(
-    '#theme' => 'pager',
-  );
-  $output['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
-  return $output;
-}
-
-function stanford_alt_check_build_upload_overview() {
-  $rows = array();
-  $upload_form = drupal_get_form('stanford_alt_check_image_uploads');
-  foreach (element_children($upload_form['images']) as $field) {
-    foreach (element_children($upload_form['images'][$field]) as $type) {
-      foreach (element_children($upload_form['images'][$field][$type]) as $entity_id) {
-        $entity = entity_load($type, array($entity_id));
-        $entity = reset($entity);
-        $host = stanford_alt_check_get_host($entity, $type);
-        if (!$host) {
-          continue;
-        }
-        list($host_entity, $host_type) = $host;
-        $host_url = entity_uri($host_type, $host_entity);
-        if ($host_type == 'bean') {
-          $title = l(t($host_entity->label), $host_url['path']);
-        }
-        else {
-          $title = l(t($host_entity->title), $host_url['path']);;
-        }
-
-        $published = 'Yes';
-        if (isset($host_entity->status) && !$host_entity->status) {
-          $published = 'No';
-        }
-
-        foreach (element_children($upload_form['images'][$field][$type][$entity_id]) as $fid) {
-          $rows[] = array(
-            drupal_render($upload_form['images'][$field][$type][$entity_id][$fid]['image']),
-            'Title' => $title,
-            'Published' => $published,
-            'Alt Attribute' => $upload_form['images'][$field][$type][$entity_id][$fid]['alt']['#default_value'],
-            'Changed' => $upload_form['images'][$field][$type][$entity_id][$fid]['changed_stamp']['#markup'],
-            'Last Changed' => drupal_render($upload_form['images'][$field][$type][$entity_id][$fid]['changed']),
-          );
-        }
-      }
-    }
-  }
-  return $rows;
-}
-
-function stanford_alt_check_build_wysiwyg_overview(array $rows) {
-  $wysiwyg_form = drupal_get_form('stanford_alt_check_image_wysiwyg');
-  foreach (element_children($wysiwyg_form['images']) as $field) {
-    foreach (element_children($wysiwyg_form['images'][$field]) as $type) {
-      foreach (element_children($wysiwyg_form['images'][$field][$type]) as $entity_id) {
-        $entity = entity_load($type, array($entity_id));
-        $entity = reset($entity);
-        $host = stanford_alt_check_get_host($entity, $type);
-        if (!$host) {
-          continue;
-        }
-        list($host_entity, $host_type) = $host;
-        $host_url = entity_uri($host_type, $host_entity);
-        if ($host_type == 'bean') {
-          $title = l(t($host_entity->label), $host_url['path']);
-        }
-        else {
-          $title = l(t($host_entity->title), $host_url['path']);;
-        }
-
-        $published = 'Yes';
-        if (isset($host_entity->status) && !$host_entity->status) {
-          $published = 'No';
-        }
-
-
-        foreach (element_children($wysiwyg_form['images'][$field][$type][$entity_id]) as $delta) {
-          foreach (element_children($wysiwyg_form['images'][$field][$type][$entity_id][$delta]) as $image_position) {
-            $image = $wysiwyg_form['images'][$field][$type][$entity_id][$delta][$image_position];
-
-            $rows[] = array(
-              drupal_render($image['image']),
-              'Title' => $title,
-              'Published' => $published,
-              'Alt Attribute' => $image['alt']['#default_value'],
-              'Changed' => $image['changed_stamp']['#markup'],
-              'Last Changed' => drupal_render($image['changed']),
-            );
-          }
-        }
-      }
-    }
-  }
-  return $rows;
 }
 
 /**
@@ -492,8 +132,47 @@ function stanford_alt_check_get_host($entity, $type) {
   }
 
   if ($host_entity && $host_type) {
-    list($entity_id, $vid, $bundle) = entity_extract_ids($host_type, $host_entity);
-    return array($host_entity, $host_type, $entity_id, $vid, $bundle);
+    $meta = _stanford_alt_check_get_host_meta($host_type, $host_entity);
+    return array(
+      $host_entity,
+      $host_type,
+      $meta['id'],
+      $meta['title'],
+      $meta['uri'],
+      $meta['status'],
+    );
   }
   return FALSE;
+}
+
+/**
+ * Parse the entity to obtain the data we need.
+ *
+ * @param string $type
+ *   The type of the entity.
+ * @param object $entity
+ *   Entity to get data from.
+ *
+ * @return array
+ *   Keyed array of the needed data
+ */
+function _stanford_alt_check_get_host_meta($type, $entity) {
+  list($entity_id, ,) = entity_extract_ids($type, $entity);
+
+  $title = $entity->title;
+  if ($type == 'bean') {
+    $title = $entity->label;
+  }
+
+  $published = 'Yes';
+  if (isset($entity->status) && !$entity->status) {
+    $published = 'No';
+  }
+  $uri = entity_uri($type, $entity);
+  return array(
+    'id' => $entity_id,
+    'title' => $title,
+    'uri' => $uri['path'],
+    'status' => $published,
+  );
 }

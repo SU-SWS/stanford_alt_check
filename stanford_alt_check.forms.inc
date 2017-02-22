@@ -6,341 +6,430 @@
  */
 
 /**
- * Alt Check Images form callback.
+ * Stanford Alt check edit form.
  */
-function stanford_alt_check_image_uploads($form, &$form_state) {
+function stanford_alt_check_form($form, &$form_state) {
   if (module_exists('colorbox')) {
     _colorbox_doheader();
   }
 
-  drupal_set_title(t("Image Uploads"));
-  $form = array();
-  $form['#tree'] = TRUE;
-
-  $filter = '0';
-  $get = drupal_get_query_parameters($_GET);
+  $get = drupal_get_query_parameters();
+  $filter = NULL;
   if (isset($get['filter'])) {
     $filter = $get['filter'];
   }
-  $form += stanford_alt_check_filter_form($filter);
-
-  $image_entities = stanford_alt_check_upload_entities($filter);
-  foreach ($image_entities as $field => $types) {
-    foreach ($types as $type => $bundles) {
-      foreach ($bundles as $entities) {
-        foreach ($entities as $id => $entity) {
-          if ($images = field_get_items($type, $entity, $field)) {
-            foreach ($images as $image) {
-              $image_row = stanford_alt_check_get_image_form_component($image, $entity, $type);
-              if ($image_row) {
-                $form['images'][$field][$type][$id][$image['fid']] = $image_row;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  $form['submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Save'),
-  );
-  $form['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
-  return $form;
-}
-
-/**
- * Alt check images submit handler to save entities with new alt attributes.
- */
-function stanford_alt_check_image_uploads_submit($form, &$form_state) {
-  $changed = 0;
-  foreach ($form_state['values']['images'] as $field_name => $types) {
-    foreach ($types as $type => $entity_ids) {
-      foreach ($entity_ids as $entity_id => $files) {
-        foreach ($files as $fid => $alt) {
-          if ($form['images'][$field_name][$type][$entity_id][$fid]['alt']['#default_value'] !== $alt['alt']) {
-            $entities_array = entity_load($type, array($entity_id));
-            $entity = reset($entities_array);
-            $field_items = &$entity->{$field_name}[LANGUAGE_NONE];
-            foreach ($field_items as &$item) {
-              if ($item['fid'] == $fid) {
-                $item['alt'] = $alt['alt'];
-              }
-            }
-            entity_save($type, $entity);
-            $changed++;
-          }
-        }
-      }
-    }
+  $fields = NULL;
+  if (isset($get['fields'])) {
+    $fields = $get['fields'];
   }
 
-  drupal_set_message(t('Alt Attributes updated for !num images', array('!num' => $changed)));
-}
-
-/**
- * Menu callback to display list of entities with missing alt attributes.
- */
-function stanford_alt_check_image_wysiwyg($form, &$form_state) {
-  if (module_exists('colorbox')) {
-    _colorbox_doheader();
-  }
-
-  drupal_set_title(t("WYSIWYG Images"));
-  $form = array();
   $form['#tree'] = TRUE;
 
-  $filter = '0';
-  $get = drupal_get_query_parameters($_GET);
-  if (isset($get['filter'])) {
-    $filter = $get['filter'];
-  }
-  $form += stanford_alt_check_filter_form($filter);
-
-  $image_entities = stanford_alt_check_get_wysiwyg($filter);
-  foreach ($image_entities as $field => $types) {
-    foreach ($types as $type => $bundles) {
-      foreach ($bundles as $entities) {
-        foreach ($entities as $id => $field_items) {
-          foreach ($field_items as $delta => $images) {
-            $entity = entity_load($type, array($id));
-            $entity = reset($entity);
-            foreach ($images as $position => $image) {
-              $image_row = stanford_alt_check_get_image_form_component($image, $entity, $type);
-              if ($image_row) {
-                $form['images'][$field][$type][$id][$delta][$position] = $image_row;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  $form['submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Save'),
-  );
-  $form['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
-  return $form;
-}
-
-/**
- * Save the image new alt text.
- */
-function stanford_alt_check_image_wysiwyg_submit($form, &$form_state) {
-  $changed = 0;
-  foreach ($form_state['values']['images'] as $field_name => $types) {
-    foreach ($types as $type => $entities) {
-      foreach ($entities as $id => $field_items) {
-        $entity = NULL;
-        foreach ($field_items as $delta => $images) {
-          foreach ($images as $position => $alt) {
-
-            // No alt provided.
-            if (!$alt['alt']) {
-              continue;
-            }
-
-            // Current alt matches existing alt.
-            if ($form['images'][$field_name][$type][$id][$delta][$position]['alt']['#default_value'] == $alt['alt']) {
-              continue;
-            }
-
-            $changed++;
-            $entity = entity_load($type, array($id));
-            $entity = reset($entity);
-
-            stanford_alt_check_set_wysiwyg_alt($entity->{$field_name}[LANGUAGE_NONE][$delta], $position, $alt['alt']);
-          }
-
-          if ($entity) {
-            entity_save($type, $entity);
-          }
-        }
-      }
-    }
-  }
-
-  drupal_set_message(t('Alt Attributes updated for !num images', array('!num' => $changed)));
-}
-
-/**
- * Use DOMDocument to find the image and set the alt text.
- *
- * @param array $field
- *   Field item data.
- * @param int $position
- *   The position of the image in the html as found by
- *   DOMDocument->getElementsByTagName('img').
- * @param string $alt
- *   The alt attribut string to set.
- */
-function stanford_alt_check_set_wysiwyg_alt(array &$field, $position, $alt) {
-  $dom = new DOMDocument();
-
-  $dom->loadHTML($field['value'], LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-  /** @var DOMElement $img_element */
-  foreach ($dom->getElementsByTagName('img') as $pos => $img_element) {
-    if ($position != $pos) {
-      continue;
-    }
-    $img_element->setAttribute('alt', $alt);
-  }
-  $field['value'] = $dom->saveHTML();
-
-  if (isset($field['safe_value'])) {
-    $dom->loadHTML($field['safe_value'], LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-    /** @var DOMElement $img_element */
-    foreach ($dom->getElementsByTagName('img') as $pos => $img_element) {
-      if ($position != $pos) {
-        continue;
-      }
-      $img_element->setAttribute('alt', $alt);
-    }
-    $field['safe_value'] = $dom->saveHTML();
-  }
-}
-
-/**
- * Process the image array to build the form components necessary.
- *
- * @param array $image
- *   Field file array.
- * @param object $entity
- *   Entity Object.
- * @param string $type
- *   Entity type.
- *
- * @return array|bool
- *   Form elements or FALSE if can't get the host entity.
- */
-function stanford_alt_check_get_image_form_component(array $image, $entity, $type) {
-  // Display the image for quick reference.
-  if ($image['external']) {
-    $image_url = file_create_url($image['uri']);
-  }
-  else {
-    $image_url = image_style_url('thumbnail', $image['uri']);
-  }
-  $image_full_url = file_create_url($image['uri']);
-
-  $image_row = array();
-  $image_row['image'] = array(
-    '#markup' => "<a class=\"colorbox-load\" href='$image_full_url' target='_blank'><img class=\"alt-check-image\" src='$image_url' /></a>",
-  );
-
-  if (!($item = stanford_alt_check_get_host($entity, $type))) {
-    return FALSE;
-  }
-  list($host_entity, $host_type) = $item;
-
-  $title = $host_entity->title;
-  // Beans use the label property as the identifier.
-  if ($host_type == 'bean') {
-    $title = $host_entity->label;
-  }
-
-  if (strlen($title) > 50) {
-    $title = substr($title, 0, 50) . "...";
-  }
-
-  // Check if user has access to update the entity displayed.
-  if (entity_access('update', $host_type)) {
-    $image_row['alt'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Alt Text for %filename', array('%filename' => $image['filename'])),
-      '#default_value' => $image['alt'] ? $image['alt'] : '',
-    );
-  }
-  else {
-    $image_row['alt'] = array(
-      '#markup' => t('Permission Not Allowed.'),
-    );
-  }
-
-  $entity_uri = entity_uri($host_type, $host_entity);
-  $image_row['entity_uri'] = array(
-    '#markup' => l(t($title), $entity_uri['path']),
-  );
-
-  // Published or not.
-  if (isset($host_entity->status)) {
-    $image_row['entity_status'] = array(
-      '#markup' => $host_entity->status ? t('Yes') : t('No'),
-    );
-  }
-  else {
-    $image_row['entity_status'] = array(
-      '#markup' => t('Yes'),
-    );
-  }
-
-  // Last changed interval.
-  $image_row['changed'] = array(
-    '#markup' => t('!interval Ago', array('!interval' => format_interval(time() - $host_entity->changed))),
-  );
-  $image_row['changed_stamp'] = array(
-    '#markup' => $host_entity->changed,
-  );
-
-  return $image_row;
-}
-
-/**
- * Build the portion of the form for the filter.
- *
- * @param string $filter
- *   Default value for the filter select list.
- *
- * @return array
- *   Form components for the filter.
- */
-function stanford_alt_check_filter_form($filter) {
-  $form = array();
-  $form['filter_form'] = array(
+  $form['filter_set'] = array(
     '#type' => 'fieldset',
     '#title' => t('Filter'),
   );
-  $form['filter_form']['filter'] = array(
+  $form['filter_set']['filter'] = array(
     '#type' => 'select',
     '#title' => t('Images'),
     '#options' => array(
-      '0' => t('All'),
-      'empty' => t('Images with empty alt'),
-      'filled' => t('Images with filled in alt'),
+      0 => t('All'),
+      'empty' => t('Empty Alt'),
+      'filled' => t('Populated Alt'),
     ),
     '#default_value' => $filter,
   );
-  $form['filter_form']['actions'] = array(
-    '#type' => 'actions',
+  $form['filter_set']['fields'] = array(
+    '#type' => 'select',
+    '#title' => t('Fields'),
+    '#options' => array(
+      0 => t('All'),
+      'wysiwyg' => t('WYSIWYG Fields'),
+      'upload' => t('Upload Fields'),
+    ),
+    '#default_value' => $fields,
   );
-  $form['filter_form']['actions']['filter_submit'] = array(
+
+  $form['filter_set']['actions'] = array('#type' => 'actions');
+  $form['filter_set']['actions']['filter_submit'] = array(
     '#type' => 'submit',
     '#value' => t('Filter'),
-    '#name' => 'filter',
-    '#submit' => array('stanford_alt_check_form_filter'),
+    '#name' => 'filter-submit',
+    '#submit' => array('_stanford_alt_check_form_filter'),
   );
-  $form['filter_form']['actions']['filter_reset'] = array(
+  $form['filter_set']['actions']['filter_reset'] = array(
     '#type' => 'submit',
     '#value' => t('Reset'),
-    '#name' => 'reset',
-    '#submit' => array('stanford_alt_check_form_filter'),
+    '#name' => 'filter-reset',
+    '#submit' => array('_stanford_alt_check_form_filter'),
   );
+
+  $rows = array();
+  if ($fields != 'wysiwyg') {
+    _stanford_alt_check_upload_rows($rows, $filter);
+  }
+  if ($fields != 'upload') {
+    _stanford_alt_check_wysiwgy_rows($rows, $filter);
+  }
+
+  usort($rows, 'stanford_alt_check_sort_rows');
+
+  foreach ($rows as $row_num => $row) {
+    if ($row['type'] != 'wysiwyg') {
+      $row['position'] = 0;
+    }
+
+    $component = array(
+      'image' => array('#markup' => _stanford_alt_check_build_image($row['Image'], $row['original_src'])),
+      'title' => array('#markup' => $row['Title']),
+      'published' => array('#markup' => $row['Published']),
+      'changed' => array('#markup' => format_interval($row['Last Changed'])),
+      'alt' => array(
+        '#type' => 'textfield',
+        '#title' => t('Alt Text for !src', array('!src' => $row['Image'])),
+        '#default_value' => $row['Alt Attribute'],
+        '#title_display' => 'invisible',
+      ),
+    );
+
+    $form[$row_num] = $component;
+    $form_state['images'][$row_num] = $row;
+  }
+  $form['save'] = array('#type' => 'submit', '#value' => t('Save'));
+  $form['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
   return $form;
+}
+
+/**
+ * Create the html for the linked image.
+ *
+ * @param string $thumbnail
+ *   Image style url.
+ * @param string $source
+ *   Original image url.
+ *
+ * @return string
+ *   The html of the image link.
+ */
+function _stanford_alt_check_build_image($thumbnail, $source) {
+  $image_tag = theme('html_tag', array(
+    'element' => array(
+      '#tag' => 'img',
+      '#attributes' => array(
+        'src' => $thumbnail,
+        'class' => 'alt-check-image',
+      ),
+    ),
+  ));
+
+  return theme('html_tag', array(
+    'element' => array(
+      '#tag' => 'a',
+      '#value' => $image_tag,
+      '#attributes' => array(
+        'href' => $source,
+        'class' => 'colorbox-load',
+      ),
+    ),
+  ));
 }
 
 /**
  * Filter form submit.
  */
-function stanford_alt_check_form_filter($form, &$form_state) {
+function _stanford_alt_check_form_filter($form, &$form_state) {
+  if ($form_state['clicked_button']['#name'] == 'filter-reset') {
+    $form_state['redirect'] = current_path();
+    return;
+  }
+
   $get = drupal_get_query_parameters($_GET);
-  // If user click "Filter" and filter value is applicable.
-  if ($form_state['clicked_button']['#name'] == 'filter' && $form_state['values']['filter_form']['filter']) {
-    $get['filter'] = $form_state['values']['filter_form']['filter'];
-    $form_state['redirect'] = array(current_path(), array('query' => $get));
+  if ($form_state['values']['filter_set']['filter']) {
+    $get['filter'] = $form_state['values']['filter_set']['filter'];
   }
   else {
     unset($get['filter']);
-    $form_state['redirect'] = array(current_path(), array('query' => $get));
   }
+
+  if ($form_state['values']['filter_set']['fields']) {
+    $get['fields'] = $form_state['values']['filter_set']['fields'];
+  }
+  else {
+    unset($get['fields']);
+  }
+
+  $form_state['redirect'] = array(
+    current_path(),
+    array('query' => array($get)),
+  );
+}
+
+/**
+ * Save form submit.
+ */
+function stanford_alt_check_form_submit($form, &$form_state) {
+  $num_changed = 0;
+  foreach ($form_state['images'] as $key => $image_data) {
+    if ($form_state['values'][$key]['alt'] && $form_state['values'][$key]['alt'] != $image_data['Alt Attribute']) {
+      $num_changed++;
+      $entity = entity_load_single($image_data['entity_info']['entity_type'], $image_data['entity_info']['entity_id']);
+      if ($image_data['type'] == 'wysiwyg') {
+        _stanford_alt_check_wysiwyg_set($entity, $form_state['values'][$key]['alt'], $image_data);
+      }
+      else {
+        $field = $image_data['entity_info']['field_name'];
+        $delta = $image_data['delta'];
+        $entity->{$field}[LANGUAGE_NONE][$delta]['alt'] = $form_state['values'][$key]['alt'];
+      }
+      entity_save($image_data['entity_info']['entity_type'], $entity);
+    }
+  }
+  drupal_set_message(t('Alt text updated for %num images.', array('%num' => $num_changed)));
+}
+
+/**
+ * Sets the alt text in the entity using the values from $value.
+ *
+ * @param object $entity
+ *   The main object with the field data.
+ * @param string $alt
+ *   The alt to set.
+ * @param array $image_data
+ *   The submitted data.
+ */
+function _stanford_alt_check_wysiwyg_set($entity, $alt, array $image_data) {
+  $field = $image_data['entity_info']['field_name'];
+  $field_items = field_get_items($image_data['entity_info']['entity_type'], $entity, $field);
+  $field_item = $field_items[$image_data['delta']];
+  $dom = new DOMDocument();
+  $dom->loadHTML($field_item['value'], LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+  /** @var DOMElement $image */
+  foreach ($dom->getElementsByTagName('img') as $position => $image) {
+    if ($position == $image_data['position']) {
+      $image->setAttribute('alt', $alt);
+    }
+  }
+  $field_item['value'] = $dom->saveHTML();
+  $entity->{$field}[LANGUAGE_NONE][$image_data['delta']] = $field_item;
+}
+
+/**
+ * Build the rows for the table from the data for text fields.
+ *
+ * @param array $rows
+ *   Any existing rows to add to.
+ * @param string|null $filter
+ *   If the data should be filtered.
+ *   Possible values:
+ *     'filled': images with populated alts.
+ *     'empty': images with empty alts.
+ */
+function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
+  foreach (_stanford_alt_check_wysiwgy_fields() as $field) {
+    $field_query = new EntityFieldQuery();
+    $field_query->fieldCondition($field['field_name'], 'value', '%<img%', 'like');
+    $results = $field_query->execute();
+    foreach ($results as $entity_type => $entities) {
+      foreach (array_keys($entities) as $entity_id) {
+        $entity = entity_load_single($entity_type, $entity_id);
+        $host_entity_info = stanford_alt_check_get_host($entity, $entity_type);
+
+        // Cant find host entity info.
+        if (!$host_entity_info) {
+          continue;
+        }
+
+        list($host_entity, $host_type, $host_id, $title, $host_url, $published) = $host_entity_info;
+        if (!($field_items = field_get_items($entity_type, $entity, $field['field_name']))) {
+          continue;
+        }
+
+        foreach ($field_items as $delta => $field_item) {
+          $dom = new DOMDocument();
+          $dom->loadHTML($field_item['value']);
+          /** @var DOMElement $image */
+          foreach ($dom->getElementsByTagName('img') as $position => $image) {
+            list($image_url, $original_url) = _stanford_alt_check_build_wysiwyg_item($image, $filter);
+            if (!$image_url) {
+              continue;
+            }
+            $rows[] = array(
+              'Image' => $image_url,
+              'Title' => l(t($title), $host_url),
+              'Published' => $published,
+              'Alt Attribute' => $image->getAttribute('alt'),
+              'Last Changed' => time() - $host_entity->changed,
+              'type' => 'wysiwyg',
+              'delta' => $delta,
+              'position' => $position,
+              'original_src' => $original_url,
+              'entity_info' => array(
+                'entity_type' => $entity_type,
+                'entity_id' => $entity_id,
+                'field_name' => $field['field_name'],
+                'host_type' => $host_type,
+                'host_id' => $host_id,
+                'host_url' => $host_url,
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Parse the DOMElement to get the paths of a thumbnail and original image.
+ *
+ * @param DOMElement $image
+ *   The image element from the html.
+ * @param string $filter
+ *   The filter.
+ *
+ * @return array
+ *   A keyed array of original image and the style image.
+ */
+function _stanford_alt_check_build_wysiwyg_item($image, $filter) {
+  $alt = $image->getAttribute('alt');
+  $src = $image->getAttribute('src');
+  if (($filter == 'empty' && $alt) || ($filter == 'filled' && !$alt)) {
+    return array();
+  }
+
+  $src_parts = parse_url($src);
+  $original_url = $image_url = $src;
+  global $base_url;
+  if (!isset($src_parts['host']) || strpos($src_parts['host'], $base_url) !== FALSE) {
+    if (strpos($src_parts['path'], '/styles/') !== FALSE) {
+      // Image derivative.
+      $exploded = explode('/', $src_parts['path']);
+      $style_pos = array_search('styles', $exploded) + 3;
+      $src = '//' . implode('/', array_slice($exploded, $style_pos));
+    }
+    else {
+      // Original Image.
+      $src = str_replace(variable_get('file_public_path'), '', $src_parts['path']);
+      $src = str_replace(variable_get('file_private_path'), '', $src);
+      $src = '//' . trim($src, '/');
+    }
+  }
+
+  $fid = db_select('file_managed', 'f')
+    ->fields('f', array('fid'))
+    ->condition('uri', "%$src", 'like')
+    ->execute()
+    ->fetchField();
+
+  if ($fid) {
+    $file = file_load($fid);
+    $image_url = image_style_url('thumbnail', $file->uri);
+    $original_url = file_create_url($file->uri);
+  }
+  return array($image_url, $original_url);
+}
+
+/**
+ * Get all fields with possible html.
+ *
+ * @return array
+ *   All fields with text_processing configured.
+ */
+function _stanford_alt_check_wysiwgy_fields() {
+  $fields = array();
+  $wywisyg_field_types = array('text', 'text_long', 'text_with_summary');
+  foreach (field_info_fields() as $field) {
+    if (in_array($field['type'], $wywisyg_field_types)) {
+      foreach ($field['bundles'] as $type => $bundles) {
+        foreach ($bundles as $bundle) {
+          $instance = field_info_instance($type, $field['field_name'], $bundle);
+
+          // HTML is available.
+          if ($instance['settings']['text_processing']) {
+            $fields[] = $field;
+          }
+        }
+      }
+    }
+  }
+  return $fields;
+}
+
+/**
+ * Build the rows for the table from the data for image fields.
+ *
+ * @param array $rows
+ *   Any existing rows to add to.
+ * @param string|null $filter
+ *   If the data should be filtered.
+ *   Possible values:
+ *     'filled': images with populated alts.
+ *     'empty': images with empty alts.
+ */
+function _stanford_alt_check_upload_rows(&$rows = array(), $filter = NULL) {
+  foreach (_stanford_alt_check_upload_fields() as $field) {
+    $field_query = new EntityFieldQuery();
+    $field_query->fieldCondition($field['field_name'], 'fid', '0', '>=');
+
+    // If filters a set, only grab appropriate items.
+    if ($filter == 'empty') {
+      $field_query->fieldCondition($field['field_name'], 'alt', '', '=');
+    }
+    elseif ($filter == 'filled') {
+      $field_query->fieldCondition($field['field_name'], 'alt', '', '!=');
+    }
+
+    $results = $field_query->execute();
+    foreach ($results as $entity_type => $entities) {
+      foreach (array_keys($entities) as $entity_id) {
+        $entity = entity_load_single($entity_type, $entity_id);
+        $host_entity_info = stanford_alt_check_get_host($entity, $entity_type);
+        if (!$host_entity_info) {
+          continue;
+        }
+
+        list($host_entity, $host_type, $host_id, $title, $host_url, $published) = $host_entity_info;
+
+        $field_items = field_get_items($entity_type, $entity, $field['field_name']);
+
+        foreach ($field_items as $delta => $item) {
+          $rows[] = array(
+            'Image' => image_style_url('thumbnail', $item['uri']),
+            'Title' => l(t($title), $host_url),
+            'Published' => $published,
+            'Alt Attribute' => $item['alt'],
+            'Last Changed' => time() - $host_entity->changed,
+            'type' => 'upload',
+            'delta' => $delta,
+            'original_src' => file_create_url($item['uri']),
+            'entity_info' => array(
+              'entity_type' => $entity_type,
+              'entity_id' => $entity_id,
+              'field_name' => $field['field_name'],
+              'host_type' => $host_type,
+              'host_id' => $host_id,
+              'host_url' => $host_url,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+}
+
+/**
+ * Get all fields of image type.
+ *
+ * @return array
+ *   All image fields.
+ */
+function _stanford_alt_check_upload_fields() {
+  $fields = array();
+  foreach (field_info_fields() as $field) {
+    if ($field['type'] == 'image') {
+      $fields[] = $field;
+    }
+  }
+  return $fields;
 }
