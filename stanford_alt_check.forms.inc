@@ -10,6 +10,7 @@
  */
 function stanford_alt_check_form($form, &$form_state) {
   if (module_exists('colorbox')) {
+    // Allow colorbox-load class to open the image.
     _colorbox_doheader();
   }
 
@@ -24,7 +25,54 @@ function stanford_alt_check_form($form, &$form_state) {
   }
 
   $form['#tree'] = TRUE;
+  $form = _stanford_alt_check_filter_form($form, $form_state, $filter, $fields);
 
+  $rows = array();
+  // Exclude rows if filters are set.
+  if ($fields != 'wysiwyg') {
+    _stanford_alt_check_upload_rows($rows, $filter);
+  }
+  if ($fields != 'upload') {
+    _stanford_alt_check_wysiwgy_rows($rows, $filter);
+  }
+
+  // Cleanup.
+  $pager = _stanford_alt_check_cleanup_rows($rows);
+
+  foreach ($rows as $row_num => $row) {
+    if ($row['type'] == 'upload') {
+      // For upload field, there is no position since they have deltas.
+      $row['position'] = 0;
+    }
+
+    $form[$row_num] = array(
+      'image' => array('#markup' => _stanford_alt_check_build_image($row['Image'], $row['original_src'])),
+      'title' => array('#markup' => $row['Title']),
+      'published' => array('#markup' => $row['Published']),
+      'changed' => array('#markup' => format_interval($row['Last Changed'])),
+      'alt' => array(
+        '#type' => 'textfield',
+        '#title' => t('Alt Text for !src', array('!src' => $row['Image'])),
+        '#default_value' => $row['Alt Attribute'],
+        '#title_display' => 'invisible',
+      ),
+    );
+    // Sets all the data in form_state for easy access on the submit.
+    $form_state['images'][$row_num] = $row;
+  }
+
+  $form['pager'] = array('#markup' => $pager);
+  $form['save'] = array('#type' => 'submit', '#value' => t('Save'));
+  $form['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
+
+  return $form;
+}
+
+/**
+ * Add filter set to the form.
+ */
+function _stanford_alt_check_filter_form($form, &$form_state, $filter, $fields) {
+  // Filters.
   $form['filter_set'] = array(
     '#type' => 'fieldset',
     '#title' => t('Filter'),
@@ -49,55 +97,50 @@ function stanford_alt_check_form($form, &$form_state) {
     ),
     '#default_value' => $fields,
   );
-
+  // Filter Buttons.
   $form['filter_set']['actions'] = array('#type' => 'actions');
   $form['filter_set']['actions']['filter_submit'] = array(
     '#type' => 'submit',
     '#value' => t('Filter'),
     '#name' => 'filter-submit',
-    '#submit' => array('_stanford_alt_check_form_filter'),
+    '#submit' => array('_stanford_alt_check_form_filter_submit'),
   );
   $form['filter_set']['actions']['filter_reset'] = array(
     '#type' => 'submit',
     '#value' => t('Reset'),
     '#name' => 'filter-reset',
-    '#submit' => array('_stanford_alt_check_form_filter'),
+    '#submit' => array('_stanford_alt_check_form_filter_submit'),
   );
+  return $form;
+}
 
-  $rows = array();
-  if ($fields != 'wysiwyg') {
-    _stanford_alt_check_upload_rows($rows, $filter);
-  }
-  if ($fields != 'upload') {
-    _stanford_alt_check_wysiwgy_rows($rows, $filter);
+/**
+ * Cleanup, sort and slice the rows so we use what we need.
+ *
+ * @param array $rows
+ *   All rows to be cleaned up.
+ *
+ * @return string
+ *   Themed pager.
+ */
+function _stanford_alt_check_cleanup_rows(array &$rows) {
+  foreach ($rows as &$row) {
+    if (is_null($row['Alt Attribute'])) {
+      $row['Alt Attribute'] = '';
+    }
   }
 
+  // Sort rows.
   usort($rows, 'stanford_alt_check_sort_rows');
 
-  foreach ($rows as $row_num => $row) {
-    if ($row['type'] != 'wysiwyg') {
-      $row['position'] = 0;
-    }
+  // Create pager and build pager chunks.
+  $total_rows = count($rows);
+  $num_per_page = 10;
+  $current_page = pager_default_initialize(count($rows), $num_per_page);
+  $chunks = array_chunk($rows, $num_per_page, TRUE);
+  $rows = $chunks[$current_page];
 
-    $component = array(
-      'image' => array('#markup' => _stanford_alt_check_build_image($row['Image'], $row['original_src'])),
-      'title' => array('#markup' => $row['Title']),
-      'published' => array('#markup' => $row['Published']),
-      'changed' => array('#markup' => format_interval($row['Last Changed'])),
-      'alt' => array(
-        '#type' => 'textfield',
-        '#title' => t('Alt Text for !src', array('!src' => $row['Image'])),
-        '#default_value' => $row['Alt Attribute'],
-        '#title_display' => 'invisible',
-      ),
-    );
-
-    $form[$row_num] = $component;
-    $form_state['images'][$row_num] = $row;
-  }
-  $form['save'] = array('#type' => 'submit', '#value' => t('Save'));
-  $form['#attached']['css'][] = drupal_get_path('module', 'stanford_alt_check') . '/css/stanford_alt_check.admin.css';
-  return $form;
+  return theme('pager', array('quantity', $total_rows));
 }
 
 /**
@@ -122,22 +165,25 @@ function _stanford_alt_check_build_image($thumbnail, $source) {
     ),
   ));
 
-  return theme('html_tag', array(
+  $link_tag = theme('html_tag', array(
     'element' => array(
       '#tag' => 'a',
       '#value' => $image_tag,
       '#attributes' => array(
         'href' => $source,
         'class' => 'colorbox-load',
+        'target' => '_blank',
       ),
     ),
   ));
+
+  return $link_tag;
 }
 
 /**
  * Filter form submit.
  */
-function _stanford_alt_check_form_filter($form, &$form_state) {
+function _stanford_alt_check_form_filter_submit($form, &$form_state) {
   if ($form_state['clicked_button']['#name'] == 'filter-reset') {
     $form_state['redirect'] = current_path();
     return;
@@ -202,11 +248,13 @@ function _stanford_alt_check_wysiwyg_set($entity, $alt, array $image_data) {
   $field_items = field_get_items($image_data['entity_info']['entity_type'], $entity, $field);
   $field_item = $field_items[$image_data['delta']];
   $dom = new DOMDocument();
+  libxml_use_internal_errors(TRUE);
   $dom->loadHTML($field_item['value'], LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
   /** @var DOMElement $image */
   foreach ($dom->getElementsByTagName('img') as $position => $image) {
-    if ($position == $image_data['position']) {
+    if ($position == $image_data['position'] && $image->getAttribute('src') == $image_data['raw_url']) {
       $image->setAttribute('alt', $alt);
+      break;
     }
   }
   $field_item['value'] = $dom->saveHTML();
@@ -246,6 +294,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
 
         foreach ($field_items as $delta => $field_item) {
           $dom = new DOMDocument();
+          libxml_use_internal_errors(TRUE);
           $dom->loadHTML($field_item['value']);
           /** @var DOMElement $image */
           foreach ($dom->getElementsByTagName('img') as $position => $image) {
@@ -263,6 +312,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
               'delta' => $delta,
               'position' => $position,
               'original_src' => $original_url,
+              'raw_url' => $image->getAttribute('src'),
               'entity_info' => array(
                 'entity_type' => $entity_type,
                 'entity_id' => $entity_id,
@@ -368,18 +418,7 @@ function _stanford_alt_check_wysiwgy_fields() {
  */
 function _stanford_alt_check_upload_rows(&$rows = array(), $filter = NULL) {
   foreach (_stanford_alt_check_upload_fields() as $field) {
-    $field_query = new EntityFieldQuery();
-    $field_query->fieldCondition($field['field_name'], 'fid', '0', '>=');
-
-    // If filters a set, only grab appropriate items.
-    if ($filter == 'empty') {
-      $field_query->fieldCondition($field['field_name'], 'alt', '', '=');
-    }
-    elseif ($filter == 'filled') {
-      $field_query->fieldCondition($field['field_name'], 'alt', '', '!=');
-    }
-
-    $results = $field_query->execute();
+    $results = _stanford_alt_check_get_results($field['field_name'], $filter);
     foreach ($results as $entity_type => $entities) {
       foreach (array_keys($entities) as $entity_id) {
         $entity = entity_load_single($entity_type, $entity_id);
@@ -415,7 +454,64 @@ function _stanford_alt_check_upload_rows(&$rows = array(), $filter = NULL) {
       }
     }
   }
+}
 
+/**
+ * Use the field and filter to do entity field queries and obtain a list.
+ *
+ * @param string $field
+ *   The field name on the entity.
+ * @param string|null $filter
+ *   If we want to filter out certain entities.
+ *
+ * @return array
+ *   The keyed array provided by EntityFieldQuery.
+ */
+function _stanford_alt_check_get_results($field, $filter = NULL) {
+  if ($filter == 'empty') {
+    // Get filled alt attributes to negate.
+    $filled_results = _stanford_alt_check_get_results($field, 'filled');
+
+    if (!$filled_results) {
+      // If no entities have filled in alt attributes, just give all entities
+      // with images.
+      return _stanford_alt_check_get_results($field);
+    }
+
+    $empty_results = array();
+    foreach (array_keys($filled_results) as $type) {
+
+      // Get all entities that do not have populated alt attributes.
+      $field_query = new EntityFieldQuery();
+      $field_query->entityCondition('entity_type', $type)
+        ->entityCondition('entity_id', array_keys($filled_results[$type]), 'NOT IN')
+        ->fieldCondition($field, 'fid', '0', '>=');
+
+      // Merge the results together.
+      foreach ($field_query->execute() as $type => $entities) {
+        if (!isset($empty_results[$type])) {
+          $empty_results[$type] = $entities;
+        }
+        else {
+          $empty_results[$type] = array_merge($empty_results[$type], $entities);
+        }
+      }
+    }
+
+    return $empty_results;
+  }
+  elseif ($filter == 'filled') {
+    // Only entites with populated image alt attributes.
+    $field_query = new EntityFieldQuery();
+    $field_query->fieldCondition($field, 'fid', '0', '>=');
+    $field_query->fieldCondition($field, 'alt', '', '!=');
+    return $field_query->execute();
+  }
+
+  // All entities with images.
+  $field_query = new EntityFieldQuery();
+  $field_query->fieldCondition($field, 'fid', '0', '>=');
+  return $field_query->execute();
 }
 
 /**
