@@ -295,7 +295,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
         foreach ($field_items as $delta => $field_item) {
           $dom = new DOMDocument();
           libxml_use_internal_errors(TRUE);
-          $dom->loadHTML($field_item['value']);
+          $dom->loadHTML(check_markup($field_item['value'], $field_item['format']));
           /** @var DOMElement $image */
           foreach ($dom->getElementsByTagName('img') as $position => $image) {
             $wysiwyg_item = _stanford_alt_check_build_wysiwyg_item($image, $filter);
@@ -342,7 +342,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
  * @return array
  *   A keyed array of original image and the style image.
  */
-function _stanford_alt_check_build_wysiwyg_item($image, $filter) {
+function _stanford_alt_check_build_wysiwyg_item(DOMElement $image, $filter) {
   $alt = $image->getAttribute('alt');
   $src = $image->getAttribute('src');
   if (($filter == 'empty' && $alt) || ($filter == 'filled' && !$alt)) {
@@ -352,7 +352,7 @@ function _stanford_alt_check_build_wysiwyg_item($image, $filter) {
   $src_parts = parse_url($src);
   $original_url = $image_url = $src;
   global $base_url;
-  if (!isset($src_parts['host']) || strpos($src_parts['host'], $base_url) !== FALSE) {
+  if (!isset($src_parts['host']) || strpos($base_url, $src_parts['host']) !== FALSE) {
     if (strpos($src_parts['path'], '/styles/') !== FALSE) {
       // Image derivative.
       $exploded = explode('/', $src_parts['path']);
