@@ -298,10 +298,12 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
           $dom->loadHTML($field_item['value']);
           /** @var DOMElement $image */
           foreach ($dom->getElementsByTagName('img') as $position => $image) {
-            list($image_url, $original_url) = _stanford_alt_check_build_wysiwyg_item($image, $filter);
-            if (!$image_url) {
+            $wysiwyg_item = _stanford_alt_check_build_wysiwyg_item($image, $filter);
+            if (count(array_filter($wysiwyg_item)) < 2) {
               continue;
             }
+            list($image_url, $original_url) = $wysiwyg_item;
+
             $rows[] = array(
               'Image' => $image_url,
               'Title' => l(t($title), $host_url),
