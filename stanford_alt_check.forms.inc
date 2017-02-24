@@ -296,8 +296,13 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
         }
 
         foreach ($field_items as $delta => $field_item) {
+          // Create a raw images array to obtain the raw src attribute later.
           $dom = new DOMDocument();
           libxml_use_internal_errors(TRUE);
+          $dom->loadHTML($field_item['value']);
+          $raw_images = $dom->getElementsByTagName('img');
+
+          $dom = new DOMDocument();
           $dom->loadHTML(check_markup($field_item['value'], $field_item['format']));
           /** @var DOMElement $image */
           foreach ($dom->getElementsByTagName('img') as $position => $image) {
@@ -306,6 +311,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
               continue;
             }
             list($image_url, $original_url) = $wysiwyg_item;
+
 
             $rows[] = array(
               'Image' => $image_url,
@@ -317,7 +323,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
               'delta' => $delta,
               'position' => $position,
               'original_src' => $original_url,
-              'raw_url' => $image->getAttribute('src'),
+              'raw_url' => $raw_images[$position]->getAttribute('src'),
               'entity_info' => array(
                 'entity_type' => $entity_type,
                 'entity_id' => $entity_id,
