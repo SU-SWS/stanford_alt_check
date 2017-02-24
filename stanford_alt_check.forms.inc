@@ -400,7 +400,7 @@ function _stanford_alt_check_wysiwgy_fields() {
 
           // HTML is available.
           if ($instance['settings']['text_processing']) {
-            $fields[] = $field_name;
+            $fields[$field_name] = $field_name;
           }
         }
       }
