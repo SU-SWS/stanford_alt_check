@@ -55,6 +55,7 @@ function stanford_alt_check_form($form, &$form_state) {
         '#title' => t('Alt Text for !src', array('!src' => $row['Image'])),
         '#default_value' => $row['Alt Attribute'],
         '#title_display' => 'invisible',
+        '#maxlength' => 512,
       ),
     );
     // Sets all the data in form_state for easy access on the submit.
@@ -216,7 +217,7 @@ function _stanford_alt_check_form_filter_submit($form, &$form_state) {
 function stanford_alt_check_form_submit($form, &$form_state) {
   $num_changed = 0;
   foreach ($form_state['images'] as $key => $image_data) {
-    if ($form_state['values'][$key]['alt'] && $form_state['values'][$key]['alt'] != $image_data['Alt Attribute']) {
+    if ($form_state['values'][$key]['alt'] != $image_data['Alt Attribute']) {
       $num_changed++;
       $entity = entity_load_single($image_data['entity_info']['entity_type'], $image_data['entity_info']['entity_id']);
       if ($image_data['type'] == 'wysiwyg') {
