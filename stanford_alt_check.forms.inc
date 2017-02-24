@@ -250,7 +250,7 @@ function _stanford_alt_check_wysiwyg_set($entity, $alt, array $image_data) {
   $field_item = $field_items[$image_data['delta']];
   $dom = new DOMDocument();
   libxml_use_internal_errors(TRUE);
-  $dom->loadHTML(check_markup($field_item['value'], $field_item['format']), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+  $dom->loadHTML($field_item['value'], LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
   /** @var DOMElement $image */
   foreach ($dom->getElementsByTagName('img') as $position => $image) {
     if ($position == $image_data['position'] && $image->getAttribute('src') == $image_data['raw_url']) {
