@@ -273,13 +273,15 @@ function _stanford_alt_check_wysiwyg_set($entity, $alt, array $image_data) {
  *     'empty': images with empty alts.
  */
 function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
-  foreach (_stanford_alt_check_wysiwgy_fields() as $field) {
+  foreach (_stanford_alt_check_wysiwgy_fields() as $field_name) {
     $field_query = new EntityFieldQuery();
-    $field_query->fieldCondition($field['field_name'], 'value', '%<img%', 'like');
+    $field_query->fieldCondition($field_name, 'value', '%<img%', 'like');
     $results = $field_query->execute();
+
     foreach ($results as $entity_type => $entities) {
-      foreach (array_keys($entities) as $entity_id) {
-        $entity = entity_load_single($entity_type, $entity_id);
+      $entities = entity_load($entity_type, array_keys($entities));
+
+      foreach ($entities as $entity_id => $entity) {
         $host_entity_info = stanford_alt_check_get_host($entity, $entity_type);
 
         // Cant find host entity info.
@@ -288,7 +290,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
         }
 
         list($host_entity, $host_type, $host_id, $title, $host_url, $published) = $host_entity_info;
-        if (!($field_items = field_get_items($entity_type, $entity, $field['field_name']))) {
+        if (!($field_items = field_get_items($entity_type, $entity, $field_name))) {
           continue;
         }
 
@@ -318,7 +320,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
               'entity_info' => array(
                 'entity_type' => $entity_type,
                 'entity_id' => $entity_id,
-                'field_name' => $field['field_name'],
+                'field_name' => $field_name,
                 'host_type' => $host_type,
                 'host_id' => $host_id,
                 'host_url' => $host_url,
@@ -390,15 +392,15 @@ function _stanford_alt_check_build_wysiwyg_item(DOMElement $image, $filter) {
 function _stanford_alt_check_wysiwgy_fields() {
   $fields = array();
   $wywisyg_field_types = array('text', 'text_long', 'text_with_summary');
-  foreach (field_info_fields() as $field) {
+  foreach (field_info_field_map() as $field_name => $field) {
     if (in_array($field['type'], $wywisyg_field_types)) {
       foreach ($field['bundles'] as $type => $bundles) {
         foreach ($bundles as $bundle) {
-          $instance = field_info_instance($type, $field['field_name'], $bundle);
+          $instance = field_info_instance($type, $field_name, $bundle);
 
           // HTML is available.
           if ($instance['settings']['text_processing']) {
-            $fields[] = $field;
+            $fields[] = $field_name;
           }
         }
       }
@@ -422,8 +424,10 @@ function _stanford_alt_check_upload_rows(&$rows = array(), $filter = NULL) {
   foreach (_stanford_alt_check_upload_fields() as $field) {
     $results = _stanford_alt_check_get_results($field['field_name'], $filter);
     foreach ($results as $entity_type => $entities) {
-      foreach (array_keys($entities) as $entity_id) {
-        $entity = entity_load_single($entity_type, $entity_id);
+      $entities = entity_load($entity_type, array_keys($entities));
+
+      foreach ($entities as $entity_id => $entity) {
+
         $host_entity_info = stanford_alt_check_get_host($entity, $entity_type);
         if (!$host_entity_info) {
           continue;
