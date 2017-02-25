@@ -19,10 +19,10 @@ function theme_stanford_alt_check_form(array $vars) {
 
   $header = array(
     array('data' => t('Image')),
-    array('data' => t('Title'), 'field' => 'Title'),
-    array('data' => t('Published'), 'field' => 'Published'),
-    array('data' => t('Alt Attribute'), 'field' => 'Alt Attribute'),
-    array('data' => t('Last Changed'), 'field' => 'Last Changed'),
+    array('data' => t('Title'), 'field' => 's.host_title', 'sort' => 'ASC'),
+    array('data' => t('Published'), 'field' => 's.host_published'),
+    array('data' => t('Alt Attribute'), 'field' => 's.alt_text'),
+    array('data' => t('Last Changed'), 'field' => 's.host_changed'),
   );
 
   $rows = array();

@@ -13,21 +13,8 @@ function stanford_alt_check_schema() {
     // Example (partial) specification for table "node".
     'description' => 'The base table for all images.',
     'fields' => array(
-      'image_id' => array(
-        'description' => 'Unique identifier of the image data row',
-        'type' => 'serial',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-      ),
-      'thumbnail' => array(
+      'uri' => array(
         'description' => 'URL of the thumbnail image.',
-        'type' => 'varchar',
-        'length' => 1000,
-        'not null' => TRUE,
-        'default' => '',
-      ),
-      'original' => array(
-        'description' => 'URL of the original image.',
         'type' => 'varchar',
         'length' => 1000,
         'not null' => TRUE,

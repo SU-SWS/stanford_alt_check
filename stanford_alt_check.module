@@ -5,6 +5,8 @@
  * Stanford Alt Check Module.
  */
 
+define('STANFORD_ALT_CHECK_PER_PAGE', 10);
+
 /**
  * Implements hook_ctools_plugin_api().
  */
@@ -43,6 +45,64 @@ function stanford_alt_check_menu() {
 }
 
 /**
+ * Implements hook_entity_insert().
+ */
+function stanford_alt_check_entity_insert($entity, $type) {
+  _stanford_alt_check_clear_entity($entity, $type);
+
+  list($entity_id, , $bundle) = entity_extract_ids($type, $entity);
+  list($host_entity, , , $host_title, $host_uri, $host_status) = _stanford_alt_check_get_host($entity, $type);
+  $images = _stanford_alt_check_entity_images($entity, $type, $bundle);
+
+  // Cant find host entity. This normally happens with field collections on
+  // old revisions.
+  if (!$host_entity) {
+    return;
+  }
+
+  foreach ($images as $field_type => $fields) {
+    foreach ($fields as $field_name => $deltas) {
+      foreach ($deltas as $delta => $field_images) {
+        foreach ($field_images as $position => $image) {
+          $record = array(
+            'uri' => $image['uri'],
+            'alt_text' => $image['alt'],
+            'entity_id' => $entity_id,
+            'entity_type' => $type,
+            'entity_field' => $field_name,
+            'entity_field_wysiwyg' => $field_type == 'wysiwyg',
+            'host_title' => $host_title,
+            'host_changed' => $host_entity->changed,
+            'host_published' => $host_status,
+            'image_meta' => serialize(array(
+              'delta' => $delta,
+              'position' => $position,
+              'host_uri' => $host_uri,
+              'raw_url' => $image['raw_url'],
+            )),
+          );
+          drupal_write_record('stanford_alt_check', $record);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function stanford_alt_check_entity_update($entity, $type) {
+  stanford_alt_check_entity_insert($entity, $type);
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function stanford_alt_check_entity_delete($entity, $type) {
+  _stanford_alt_check_clear_entity($entity, $type);
+}
+
+/**
  * Implements hook_theme().
  */
 function stanford_alt_check_theme($existing, $type, $theme, $path) {
@@ -65,7 +125,7 @@ function stanford_alt_check_theme($existing, $type, $theme, $path) {
  * @return array|bool
  *   Array of host entity data or FALSE if it fails to obtain host.
  */
-function stanford_alt_check_get_host($entity, $type) {
+function _stanford_alt_check_get_host($entity, $type) {
   $host_entity = $host_type = NULL;
   switch ($type) {
     case 'field_collection_item':
@@ -73,7 +133,7 @@ function stanford_alt_check_get_host($entity, $type) {
       // entity.
       $host_entity = $entity->hostEntity();
       $host_type = $entity->hostEntityType();
-      if (!($item = stanford_alt_check_get_host($host_entity, $host_type))) {
+      if (!($item = _stanford_alt_check_get_host($host_entity, $host_type))) {
         return FALSE;
       }
       list($host_entity, $host_type) = $item;
@@ -91,7 +151,7 @@ function stanford_alt_check_get_host($entity, $type) {
         $host_type = reset($types);
         $entity_loaded = entity_load($host_type, array_keys($results[$host_type]));
         $host_entity = reset($entity_loaded);
-        if (!($item = stanford_alt_check_get_host($host_entity, $host_type))) {
+        if (!($item = _stanford_alt_check_get_host($host_entity, $host_type))) {
           return FALSE;
         }
         list($host_entity, $host_type) = $item;
@@ -155,62 +215,34 @@ function _stanford_alt_check_get_host_meta($type, $entity) {
 }
 
 /**
- * Implements hook_entity_insert().
+ * Clears all the entries in the table for the given entity.
+ *
+ * @param object $entity
+ *   Entity to clear.
+ * @param string $type
+ *   Type of the entity.
  */
-function stanford_alt_check_entity_insert($entity, $type) {
-  list($id, , $bundle) = entity_extract_ids($type, $entity);
-  list($host_entity, $host_type, $host_id, $host_title, $host_uri, $host_status) = stanford_alt_check_get_host($entity, $type);
-  _stanford_alt_check_clear_entity($entity, $type);
-  $images = _stanford_alt_check_entity_images($entity, $type, $bundle);
-
-  foreach ($images as $field_type => $fields) {
-    foreach ($fields as $field_name => $deltas) {
-      foreach ($deltas as $delta => $field_images) {
-        foreach ($field_images as $position => $image) {
-          $record = array(
-            'thumbnail' => $image['uri'],
-            'alt_text' => $image['alt'],
-            'entity_id' => $id,
-            'entity_type' => $type,
-            'entity_field' => $field_name,
-            'entity_field_wysiwyg' => $field_type == 'wysiwyg',
-            'host_title' => $host_title,
-            'host_changed' => $host_entity->changed,
-            'host_published' => $host_status,
-            'image_meta' => array(
-              'position' => $position,
-              'host_uri' => $host_uri
-            ),
-          );
-          drupal_write_record('stanford_alt_check', $record);
-        }
-      }
-    }
-  }
-}
-
-/**
- * Implements hook_entity_update().
- */
-function stanford_alt_check_entity_update($entity, $type) {
-  stanford_alt_check_entity_insert($entity, $type);
-}
-
-/**
- * Implements hook_entity_delete().
- */
-function stanford_alt_check_entity_delete($entity, $type) {
-  _stanford_alt_check_clear_entity($entity, $type);
-}
-
 function _stanford_alt_check_clear_entity($entity, $type) {
-  list($id, ,) = entity_extract_ids($type, $entity);
+  list($entity_id, ,) = entity_extract_ids($type, $entity);
   db_delete('stanford_alt_check')
-    ->condition('entity_id', $id)
+    ->condition('entity_id', $entity_id)
     ->condition('entity_type', $type)
     ->execute();
 }
 
+/**
+ * Parse the entity to obtain all images in any field.
+ *
+ * @param object $entity
+ *   The entity to parse.
+ * @param string $type
+ *   The type of the entity.
+ * @param string $bundle
+ *   The bundle of the entity.
+ *
+ * @return array
+ *   All images keyed by if they are in a wysiwyg field or upload.
+ */
 function _stanford_alt_check_entity_images($entity, $type, $bundle) {
   $images = array();
   $text_fields = array('text', 'text_long', 'text_with_summary');
@@ -234,37 +266,72 @@ function _stanford_alt_check_entity_images($entity, $type, $bundle) {
   return $images;
 }
 
+/**
+ * Process field data items to get the uri and the alt text.
+ *
+ * @param array $items
+ *   Field items from field_get_items().
+ *
+ * @return array
+ *   All images from the field keyed by the delta.
+ */
 function _stanford_alt_check_upload_images($items) {
   $images = array();
   foreach ($items as $delta => $item) {
     $file = file_load($item['fid']);
-    $images[$delta][0] = array('uri' => $file->uri, 'alt' => $file->alt);
+    $images[$delta][0] = array(
+      'uri' => $file->uri,
+      'alt' => $item['alt'],
+      'raw_url' => $file->uri,
+    );
   }
   return $images;
 }
 
+/**
+ * Parse the html in wysiwyg fields to get the <img> elements.
+ *
+ * @param array $items
+ *   Field items from field_get_items().
+ *
+ * @return array
+ *   All images from the field keyed by the delta and the position in the html.
+ */
 function _stanford_alt_check_wysiwyg_images($items) {
   $images = array();
   foreach ($items as $delta => $item) {
 
-
     $dom = new DOMDocument();
     libxml_use_internal_errors(TRUE);
+    $dom->loadHTML($item['value']);
+    $raw_images = $dom->getElementsByTagName('img');
+
+    $dom = new DOMDocument();
     $dom->loadHTML(check_markup($item['value'], $item['format']));
 
-    /** @param DOMElement $image */
     foreach ($dom->getElementsByTagName('img') as $position => $image) {
+      $raw_source = $raw_images->item($position)->getAttribute('src');
       $images[$delta][$position] = _stanford_alt_check_wysiwyg_image($image);
+      $images[$delta][$position]['raw_url'] = $raw_source;
     }
   }
   return $images;
 }
 
+/**
+ * Process the <img> tag to get the src and alt attributes.
+ *
+ * @param \DOMElement $image
+ *   The image element to parse.
+ *
+ * @return array
+ *   Keyed array of the uri and alt text.
+ */
 function _stanford_alt_check_wysiwyg_image(DOMElement $image) {
-  $alt = $image->getAttribute('alt');
   $src = $image->getAttribute('src');
-
   $src_parts = parse_url($src);
+
+  // Sets the uri for external images.
   $uri = $src;
 
   global $base_url;
@@ -283,6 +350,7 @@ function _stanford_alt_check_wysiwyg_image(DOMElement $image) {
     }
   }
 
+  // Check if the image exists in some image field.
   $fid = db_select('file_managed', 'f')
     ->fields('f', array('fid'))
     ->condition('uri', "%$src", 'like')
@@ -293,5 +361,96 @@ function _stanford_alt_check_wysiwyg_image(DOMElement $image) {
     $file = file_load($fid);
     $uri = $file->uri;
   }
-  return array('uri' => $uri, 'alt' => $alt);
+  return array(
+    'uri' => $uri,
+    'alt' => $image->getAttribute('alt'),
+  );
+}
+
+/**
+ * Get a slice of the table used in the form.
+ *
+ * @return array
+ *   Images from the table as requested by the filters and sorting.
+ */
+function _stanford_alt_check_get_images() {
+  $header = array(
+    array('data' => t('Title'), 'field' => 's.host_title', 'sort' => 'ASC'),
+    array('data' => t('Published'), 'field' => 's.host_published'),
+    array('data' => t('Alt Attribute'), 'field' => 's.alt_text'),
+    array('data' => t('Last Changed'), 'field' => 's.host_changed'),
+  );
+
+  $rows = array();
+
+  $row_query = db_select('stanford_alt_check', 's')
+    ->extend('TableSort')
+    ->orderByHeader($header)
+    ->fields('s');
+  $total_query = db_select('stanford_alt_check', 's')
+    ->extend('TableSort')
+    ->orderByHeader($header)
+    ->fields('s');
+
+  _stanford_alt_check_set_filters($row_query);
+  _stanford_alt_check_set_filters($total_query);
+
+  $total_rows = $total_query->execute()->rowCount();
+  $page = pager_default_initialize($total_rows, STANFORD_ALT_CHECK_PER_PAGE);
+
+  $results = $row_query->range(STANFORD_ALT_CHECK_PER_PAGE * $page, STANFORD_ALT_CHECK_PER_PAGE)
+    ->execute();
+
+  while ($row = $results->fetchAssoc()) {
+    $row['image_meta'] = unserialize($row['image_meta']);
+    $rows[] = $row;
+  }
+
+  return array($rows, $total_rows);
+}
+
+/**
+ * Apply any applicable filters as defined in $_GET.
+ *
+ * @param TableSort $query
+ *   The query to apply the conditions.
+ */
+function _stanford_alt_check_set_filters(TableSort &$query) {
+  $get = drupal_get_query_parameters();
+  $alt = NULL;
+  if (isset($get['alt_text'])) {
+    $alt = $get['alt_text'];
+  }
+  $field = NULL;
+  if (isset($get['fields'])) {
+    $field = $get['fields'];
+  }
+
+  if ($alt == 'filled') {
+    $query->condition('alt_text', '', '!=');
+  }
+  elseif ($alt == 'empty') {
+    $query->condition('alt_text', '', '=');
+  }
+
+  if ($field == 'wysiwyg') {
+    $query->condition('entity_field_wysiwyg', 1);
+  }
+  elseif ($field == 'upload') {
+    $query->condition('entity_field_wysiwyg', 0);
+  }
+}
+
+/**
+ * Load the entity to be rescanned by stanford_alt_check_entity_update().
+ *
+ * @param int $entity_id
+ *   Entity id to rescan.
+ * @param string $type
+ *   The type of the entity.
+ */
+function _stanford_alt_check_rescan_entity($entity_id, $type) {
+  watchdog($type, $entity_id);
+  $entity = entity_load_single($type, $entity_id);
+  stanford_alt_check_entity_update($entity, $type);
 }
