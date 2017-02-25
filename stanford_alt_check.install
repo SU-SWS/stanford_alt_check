@@ -4,3 +4,93 @@
  * @file
  * Stanford_alt_Check install hooks.
  */
+
+/**
+ * Implements hook_schema().
+ */
+function stanford_alt_check_schema() {
+  $schema['stanford_alt_check'] = array(
+    // Example (partial) specification for table "node".
+    'description' => 'The base table for all images.',
+    'fields' => array(
+      'image_id' => array(
+        'description' => 'Unique identifier of the image data row',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'thumbnail' => array(
+        'description' => 'URL of the thumbnail image.',
+        'type' => 'varchar',
+        'length' => 1000,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'original' => array(
+        'description' => 'URL of the original image.',
+        'type' => 'varchar',
+        'length' => 1000,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'alt_text' => array(
+        'description' => 'The current {node_revision}.vid version identifier.',
+        'type' => 'varchar',
+        'length' => 512,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'entity_id' => array(
+        'description' => 'The entity id.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'entity_type' => array(
+        'description' => 'The type of entity.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'entity_field' => array(
+        'description' => 'The field on which the image is in.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'entity_field_wysiwyg' => array(
+        'description' => 'True if the field is a wysiwyg field.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'host_title' => array(
+        'description' => 'The title of the primary host entity.',
+        'type' => 'varchar',
+        'length' => 512,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'host_changed' => array(
+        'description' => 'Timestamp of the last time the entity was updated',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'host_published' => array(
+        'description' => 'If the entity is published.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'image_meta' => array(
+        'description' => 'Meta data about the image: delta, position etc.',
+        'type' => 'blob',
+      ),
+    ),
+  );
+  return $schema;
+}

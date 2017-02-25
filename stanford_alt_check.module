@@ -55,33 +55,6 @@ function stanford_alt_check_theme($existing, $type, $theme, $path) {
 }
 
 /**
- * Sort function to sort arrays with strings based on GET parameters.
- *
- * @param array $array_a
- *   Array 1 to compare.
- * @param array $array_b
- *   Array 2 to compare.
- *
- * @return int
- *   Order of the two arrays.
- */
-function stanford_alt_check_sort_rows(array $array_a, array $array_b) {
-  $get = drupal_get_query_parameters($_GET);
-
-  // Check if we are to order specifically and if the keys exist to order on.
-  if (isset($get['order']) && isset($array_a[$get['order']]) && isset($array_b[$get['order']])) {
-    // Which direction.
-    if (!isset($get['sort']) || $get['sort'] == 'asc') {
-      return strcmp(strip_tags($array_a[$get['order']]), strip_tags($array_b[$get['order']]));
-    }
-    return strcmp(strip_tags($array_b[$get['order']]), strip_tags($array_a[$get['order']]));
-  }
-
-  // Fallback: sort by first element of each array.
-  return strcmp(strip_tags($array_a[key($array_a)]), strip_tags($array_b[key($array_b)]));
-}
-
-/**
  * Recursive function that will continue down to the greates host entity.
  *
  * @param object $entity
@@ -166,10 +139,10 @@ function _stanford_alt_check_get_host_meta($type, $entity) {
   }
 
   // All entities that don't have status property.
-  $published = 'Yes';
+  $published = 1;
   // Mainly nodes which have status.
-  if (isset($entity->status) && !$entity->status) {
-    $published = 'No';
+  if (isset($entity->status)) {
+    $published = $entity->status;
   }
 
   $uri = entity_uri($type, $entity);
@@ -179,4 +152,146 @@ function _stanford_alt_check_get_host_meta($type, $entity) {
     'uri' => $uri['path'],
     'status' => $published,
   );
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function stanford_alt_check_entity_insert($entity, $type) {
+  list($id, , $bundle) = entity_extract_ids($type, $entity);
+  list($host_entity, $host_type, $host_id, $host_title, $host_uri, $host_status) = stanford_alt_check_get_host($entity, $type);
+  _stanford_alt_check_clear_entity($entity, $type);
+  $images = _stanford_alt_check_entity_images($entity, $type, $bundle);
+
+  foreach ($images as $field_type => $fields) {
+    foreach ($fields as $field_name => $deltas) {
+      foreach ($deltas as $delta => $field_images) {
+        foreach ($field_images as $position => $image) {
+          $record = array(
+            'thumbnail' => $image['uri'],
+            'alt_text' => $image['alt'],
+            'entity_id' => $id,
+            'entity_type' => $type,
+            'entity_field' => $field_name,
+            'entity_field_wysiwyg' => $field_type == 'wysiwyg',
+            'host_title' => $host_title,
+            'host_changed' => $host_entity->changed,
+            'host_published' => $host_status,
+            'image_meta' => array(
+              'position' => $position,
+              'host_uri' => $host_uri
+            ),
+          );
+          drupal_write_record('stanford_alt_check', $record);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function stanford_alt_check_entity_update($entity, $type) {
+  stanford_alt_check_entity_insert($entity, $type);
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function stanford_alt_check_entity_delete($entity, $type) {
+  _stanford_alt_check_clear_entity($entity, $type);
+}
+
+function _stanford_alt_check_clear_entity($entity, $type) {
+  list($id, ,) = entity_extract_ids($type, $entity);
+  db_delete('stanford_alt_check')
+    ->condition('entity_id', $id)
+    ->condition('entity_type', $type)
+    ->execute();
+}
+
+function _stanford_alt_check_entity_images($entity, $type, $bundle) {
+  $images = array();
+  $text_fields = array('text', 'text_long', 'text_with_summary');
+  foreach (field_info_instances($type, $bundle) as $field_name => $instance) {
+    $field = field_info_field($field_name);
+    if (in_array($field['type'], $text_fields) && $instance['settings']['text_processing']) {
+      // WYSIWYG Field.
+      if ($items = field_get_items($type, $entity, $field_name)) {
+        $images['wysiwyg'][$field_name] = _stanford_alt_check_wysiwyg_images($items);
+      }
+      continue;
+    }
+
+    if ($field['type'] == 'image') {
+      // Image Field.
+      if ($items = field_get_items($type, $entity, $field_name)) {
+        $images['upload'][$field_name] = _stanford_alt_check_upload_images($items);
+      }
+    }
+  }
+  return $images;
+}
+
+function _stanford_alt_check_upload_images($items) {
+  $images = array();
+  foreach ($items as $delta => $item) {
+    $file = file_load($item['fid']);
+    $images[$delta][0] = array('uri' => $file->uri, 'alt' => $file->alt);
+  }
+  return $images;
+}
+
+function _stanford_alt_check_wysiwyg_images($items) {
+  $images = array();
+  foreach ($items as $delta => $item) {
+
+
+    $dom = new DOMDocument();
+    libxml_use_internal_errors(TRUE);
+    $dom->loadHTML(check_markup($item['value'], $item['format']));
+
+    /** @param DOMElement $image */
+    foreach ($dom->getElementsByTagName('img') as $position => $image) {
+      $images[$delta][$position] = _stanford_alt_check_wysiwyg_image($image);
+    }
+  }
+  return $images;
+}
+
+function _stanford_alt_check_wysiwyg_image(DOMElement $image) {
+  $alt = $image->getAttribute('alt');
+  $src = $image->getAttribute('src');
+
+  $src_parts = parse_url($src);
+  $uri = $src;
+
+  global $base_url;
+  if (!isset($src_parts['host']) || strpos($base_url, $src_parts['host']) !== FALSE) {
+    if (strpos($src_parts['path'], '/styles/') !== FALSE) {
+      // Image derivative.
+      $exploded = explode('/', $src_parts['path']);
+      $style_pos = array_search('styles', $exploded) + 3;
+      $src = '//' . implode('/', array_slice($exploded, $style_pos));
+    }
+    else {
+      // Original Image.
+      $src = str_replace(variable_get('file_public_path'), '', $src_parts['path']);
+      $src = str_replace(variable_get('file_private_path'), '', $src);
+      $src = '//' . trim($src, '/');
+    }
+  }
+
+  $fid = db_select('file_managed', 'f')
+    ->fields('f', array('fid'))
+    ->condition('uri', "%$src", 'like')
+    ->execute()
+    ->fetchField();
+
+  if ($fid) {
+    $file = file_load($fid);
+    $uri = $file->uri;
+  }
+  return array('uri' => $uri, 'alt' => $alt);
 }
