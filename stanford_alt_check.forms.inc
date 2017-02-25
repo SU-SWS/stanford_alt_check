@@ -312,7 +312,8 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
             }
             list($image_url, $original_url) = $wysiwyg_item;
 
-
+            /** @param DOMNodeList $raw_images */
+            $raw_image = $raw_images->item($position);
             $rows[] = array(
               'Image' => $image_url,
               'Title' => l(t($title), $host_url),
@@ -323,7 +324,7 @@ function _stanford_alt_check_wysiwgy_rows(&$rows = array(), $filter = NULL) {
               'delta' => $delta,
               'position' => $position,
               'original_src' => $original_url,
-              'raw_url' => $raw_images[$position]->getAttribute('src'),
+              'raw_url' => $raw_image->getAttribute('src'),
               'entity_info' => array(
                 'entity_type' => $entity_type,
                 'entity_id' => $entity_id,
