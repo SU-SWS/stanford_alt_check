@@ -431,38 +431,36 @@ function _stanford_alt_check_upload_rows(&$rows = array(), $filter = NULL) {
   foreach (_stanford_alt_check_upload_fields() as $field) {
     $results = _stanford_alt_check_get_results($field['field_name'], $filter);
     foreach ($results as $entity_type => $entities) {
-      $entities = entity_load($entity_type, array_keys($entities));
-
-      foreach ($entities as $entity_id => $entity) {
-
-        $host_entity_info = stanford_alt_check_get_host($entity, $entity_type);
-        if (!$host_entity_info) {
-          continue;
-        }
-
-        list($host_entity, $host_type, $host_id, $title, $host_url, $published) = $host_entity_info;
-
-        $field_items = field_get_items($entity_type, $entity, $field['field_name']);
-
-        foreach ($field_items as $delta => $item) {
-          $rows[] = array(
-            'Image' => image_style_url('thumbnail', $item['uri']),
-            'Title' => l(t($title), $host_url),
-            'Published' => $published,
-            'Alt Attribute' => $item['alt'],
-            'Last Changed' => time() - $host_entity->changed,
-            'type' => 'upload',
-            'delta' => $delta,
-            'original_src' => file_create_url($item['uri']),
-            'entity_info' => array(
-              'entity_type' => $entity_type,
-              'entity_id' => $entity_id,
-              'field_name' => $field['field_name'],
-              'host_type' => $host_type,
-              'host_id' => $host_id,
-              'host_url' => $host_url,
-            ),
-          );
+      $ids_chunked = array_chunk(array_keys($entities), 300, TRUE);
+      foreach ($ids_chunked as $entity_ids) {
+        $entities = entity_load($entity_type, $entity_ids);
+        foreach ($entities as $entity_id => $entity) {
+          $host_entity_info = stanford_alt_check_get_host($entity, $entity_type);
+          if (!$host_entity_info) {
+            continue;
+          }
+          list($host_entity, $host_type, $host_id, $title, $host_url, $published) = $host_entity_info;
+          $field_items = field_get_items($entity_type, $entity, $field['field_name']);
+          foreach ($field_items as $delta => $item) {
+            $rows[] = array(
+              'Image' => image_style_url('thumbnail', $item['uri']),
+              'Title' => l(t($title), $host_url),
+              'Published' => $published,
+              'Alt Attribute' => $item['alt'],
+              'Last Changed' => time() - $host_entity->changed,
+              'type' => 'upload',
+              'delta' => $delta,
+              'original_src' => file_create_url($item['uri']),
+              'entity_info' => array(
+                'entity_type' => $entity_type,
+                'entity_id' => $entity_id,
+                'field_name' => $field['field_name'],
+                'host_type' => $host_type,
+                'host_id' => $host_id,
+                'host_url' => $host_url,
+              ),
+            );
+          }
         }
       }
     }
