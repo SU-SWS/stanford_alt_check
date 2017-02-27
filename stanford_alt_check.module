@@ -192,7 +192,10 @@ function _stanford_alt_check_get_host($entity, $type) {
 function _stanford_alt_check_get_host_meta($type, $entity) {
   list($entity_id, ,) = entity_extract_ids($type, $entity);
 
-  $title = $entity->title;
+  $title = '';
+  if (isset($entity->title)) {
+    $title = $entity->title;
+  }
   // Beans use label property instead.
   if ($type == 'bean') {
     $title = $entity->label;

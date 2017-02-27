@@ -138,7 +138,7 @@ function _stanford_alt_check_filter_form($form, &$form_state) {
 function _stanford_alt_check_build_image($uri) {
   $thumbnail = $original = $uri;
   $uri_parts = parse_url($uri);
-  if (count($uri_parts) == 2) {
+  if (count($uri_parts) <= 2) {
     $thumbnail = image_style_url('thumbnail', $uri);
     $original = file_create_url($uri);
   }
