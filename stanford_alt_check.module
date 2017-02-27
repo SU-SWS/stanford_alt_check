@@ -453,7 +453,6 @@ function _stanford_alt_check_set_filters(TableSort &$query) {
  *   The type of the entity.
  */
 function _stanford_alt_check_rescan_entity($entity_id, $type) {
-  watchdog($type, $entity_id);
   $entity = entity_load_single($type, $entity_id);
   stanford_alt_check_entity_update($entity, $type);
 }
