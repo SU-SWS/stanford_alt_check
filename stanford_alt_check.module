@@ -45,6 +45,17 @@ function stanford_alt_check_menu() {
 }
 
 /**
+ * Implements hook_cron_queue_info().
+ */
+function stanford_alt_check_cron_queue_info() {
+  $queues['stanford_alt_check'] = array(
+    'worker callback' => '_stanford_alt_check_rescan_entity_queue',
+    'time' => 60,
+  );
+  return $queues;
+}
+
+/**
  * Implements hook_entity_insert().
  */
 function stanford_alt_check_entity_insert($entity, $type) {
@@ -455,4 +466,16 @@ function _stanford_alt_check_set_filters(TableSort &$query) {
 function _stanford_alt_check_rescan_entity($entity_id, $type) {
   $entity = entity_load_single($type, $entity_id);
   stanford_alt_check_entity_update($entity, $type);
+}
+
+/**
+ * Cron Queue work function.
+ *
+ * @param array $data
+ *   Array of the entity id and type.
+ */
+function _stanford_alt_check_rescan_entity_queue($data) {
+  list($entity_id, $type) = $data;
+  $entity = entity_load_single($type, $entity_id);
+  stanford_alt_check_entity_insert($entity, $type);
 }

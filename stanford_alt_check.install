@@ -81,3 +81,35 @@ function stanford_alt_check_schema() {
   );
   return $schema;
 }
+
+/**
+ * Implements hook_install().
+ */
+function stanford_alt_check_install() {
+  $queue = DrupalQueue::get('stanford_alt_check');
+  foreach (entity_get_info() as $type => $definition) {
+    if ($definition['fieldable']) {
+
+      // Use EFQ so we dont have to use entity_load() and run out of memory.
+      $field_query = new EntityFieldQuery();
+      $field_query->entityCondition('entity_type', $type);
+      $results = $field_query->execute();
+
+      foreach (array_keys($results[$type]) as $entity_id) {
+        $queue->createItem(array($entity_id, $type));
+      }
+    }
+  }
+}
+
+/**
+ * Create the table.
+ */
+function stanford_alt_check_update_7101() {
+  if (!db_table_exists('stanford_alt_check')) {
+    $schema = stanford_alt_check_schema();
+    db_create_table('stanford_alt_check', $schema['stanford_alt_check']);
+
+    stanford_alt_check_install();
+  }
+}
