@@ -264,5 +264,4 @@ function _stanford_alt_check_rescan() {
   }
 
   batch_set($batch);
-  batch_process(current_path());
 }
