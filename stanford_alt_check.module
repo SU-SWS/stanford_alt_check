@@ -62,7 +62,7 @@ function stanford_alt_check_entity_insert($entity, $type) {
   _stanford_alt_check_clear_entity($entity, $type);
 
   list($entity_id, , $bundle) = entity_extract_ids($type, $entity);
-  list($host_entity, , , $host_title, $host_uri, $host_status) = _stanford_alt_check_get_host($entity, $type);
+  list($host_entity, $host_type, $host_bundle, , $host_title, $host_uri, $host_status) = _stanford_alt_check_get_host($entity, $type);
   $images = _stanford_alt_check_entity_images($entity, $type, $bundle);
 
   // Cant find host entity. This normally happens with field collections on
@@ -83,7 +83,9 @@ function stanford_alt_check_entity_insert($entity, $type) {
             'entity_field' => $field_name,
             'entity_field_wysiwyg' => $field_type == 'wysiwyg',
             'host_title' => $host_title,
-            'host_changed' => $host_entity->changed,
+            'host_type' => $host_type,
+            'host_bundle' => $host_bundle,
+            'host_changed' => $host_entity->changed ? $host_entity->changed : time(),
             'host_published' => $host_status,
             'image_meta' => serialize(array(
               'delta' => $delta,
@@ -151,6 +153,12 @@ function _stanford_alt_check_get_host($entity, $type) {
       break;
 
     case 'paragraphs_item':
+      /** @param ParagraphsItemEntity $entity */
+      if ($host_entity = $entity->hostEntity()) {
+        $host_type = $entity->hostEntityType();
+        break;
+      }
+
       // Paragraph Item entities: Change $host_type& $host_entityto host entity.
       // We use field query because the
       // ParagraphsItemEntity::hostEntityType() &
@@ -180,6 +188,7 @@ function _stanford_alt_check_get_host($entity, $type) {
     return array(
       $host_entity,
       $host_type,
+      $meta['bundle'],
       $meta['id'],
       $meta['title'],
       $meta['uri'],
@@ -201,7 +210,7 @@ function _stanford_alt_check_get_host($entity, $type) {
  *   Keyed array of the needed data
  */
 function _stanford_alt_check_get_host_meta($type, $entity) {
-  list($entity_id, ,) = entity_extract_ids($type, $entity);
+  list($entity_id, , $bundle) = entity_extract_ids($type, $entity);
 
   $title = '';
   if (isset($entity->title)) {
@@ -222,6 +231,7 @@ function _stanford_alt_check_get_host_meta($type, $entity) {
   $uri = entity_uri($type, $entity);
   return array(
     'id' => $entity_id,
+    'bundle' => $bundle,
     'title' => $title,
     'uri' => $uri['path'],
     'status' => $published,
@@ -293,6 +303,9 @@ function _stanford_alt_check_upload_images($items) {
   $images = array();
   foreach ($items as $delta => $item) {
     $file = file_load($item['fid']);
+    if (!isset($item['alt'])) {
+      $item['alt'] = '';
+    }
     $images[$delta][0] = array(
       'uri' => $file->uri,
       'alt' => $item['alt'],

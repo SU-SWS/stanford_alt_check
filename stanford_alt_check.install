@@ -60,6 +60,20 @@ function stanford_alt_check_schema() {
         'not null' => TRUE,
         'default' => '',
       ),
+      'host_type' => array(
+        'description' => 'The type of the host.',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'not null' => TRUE,
+      ),
+      'host_bundle' => array(
+        'description' => 'The bundle of the host.',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'not null' => TRUE,
+      ),
       'host_changed' => array(
         'description' => 'Timestamp of the last time the entity was updated',
         'type' => 'int',
@@ -94,9 +108,10 @@ function stanford_alt_check_install() {
       $field_query = new EntityFieldQuery();
       $field_query->entityCondition('entity_type', $type);
       $results = $field_query->execute();
-
-      foreach (array_keys($results[$type]) as $entity_id) {
-        $queue->createItem(array($entity_id, $type));
+      if ($results) {
+        foreach (array_keys($results[$type]) as $entity_id) {
+          $queue->createItem(array($entity_id, $type));
+        }
       }
     }
   }
@@ -110,6 +125,16 @@ function stanford_alt_check_update_7101() {
     $schema = stanford_alt_check_schema();
     db_create_table('stanford_alt_check', $schema['stanford_alt_check']);
 
+    stanford_alt_check_install();
+  }
+}
+
+/**
+ * Adds host_type and host_bundle to table.
+ */
+function stanford_alt_check_update_7102() {
+  if (!db_field_exists('stanford_alt_check', '')) {
+    drupal_get_schema('stanford_alt_check', TRUE);
     stanford_alt_check_install();
   }
 }
