@@ -42,6 +42,11 @@ function stanford_alt_check_form($form, &$form_state) {
       $total_rows,
     )),
   );
+  $form['rescan_description'] = array(
+    '#prefix' => '<div>',
+    '#suffix' => '</div>',
+    '#markup' => t('Warning: "Rescan Image" will take some time. Please be patient while it processes. Thank you.'),
+  );
   $form['save'] = array('#type' => 'submit', '#value' => t('Save'));
   $form['rescan'] = array(
     '#type' => 'submit',
