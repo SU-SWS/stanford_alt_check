@@ -478,8 +478,9 @@ function _stanford_alt_check_rescan_entity($entity_id, $type) {
  */
 function _stanford_alt_check_rescan_entity_queue(array $data) {
   list($entity_id, $type) = $data;
-  $entity = entity_load_single($type, $entity_id);
-  stanford_alt_check_entity_insert($entity, $type);
+  if ($entity = entity_load_single($type, $entity_id)) {
+    stanford_alt_check_entity_insert($entity, $type);
+  }
 }
 
 /**
