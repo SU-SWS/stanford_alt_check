@@ -23,6 +23,8 @@ function stanford_alt_check_form($form, &$form_state) {
     $form[$row_num] = array(
       'image' => array('#markup' => _stanford_alt_check_build_image($row['uri'])),
       'title' => array('#markup' => l($row['host_title'], $row['image_meta']['host_uri'])),
+      'type' => array('#markup' => $row['host_type']),
+      'bundle' => array('#markup' => $row['host_bundle']),
       'published' => array('#markup' => $row['host_published'] ? t('Yes') : t('No')),
       'changed' => array('#markup' => format_interval(time() - $row['host_changed'])),
       'alt' => array(
@@ -86,7 +88,7 @@ function stanford_alt_check_form_submit($form, &$form_state) {
  * Add filter set to the form.
  */
 function _stanford_alt_check_filter_form($form, &$form_state) {
-  $get = array('alt_text' => 0, 'fields' => 0);
+  $get = array('alt_text' => 0, 'fields' => 0, 'entity_type' => NULL);
   $get = array_merge($get, drupal_get_query_parameters($_GET));
 
   // Filters.
@@ -98,21 +100,48 @@ function _stanford_alt_check_filter_form($form, &$form_state) {
     '#type' => 'select',
     '#title' => t('Images'),
     '#options' => array(
-      0 => t('All'),
+      -1 => t('All'),
       'empty' => t('Empty Alt'),
       'filled' => t('Populated Alt'),
     ),
     '#default_value' => $get['alt_text'],
   );
-  $form['filter_set']['fields'] = array(
+  $form['filter_set']['entity_field_wysiwyg'] = array(
     '#type' => 'select',
     '#title' => t('Fields'),
     '#options' => array(
-      0 => t('All'),
-      'wysiwyg' => t('WYSIWYG Fields'),
-      'upload' => t('Upload Fields'),
+      -1 => t('All'),
+      1 => t('WYSIWYG Fields'),
+      0 => t('Upload Fields'),
     ),
-    '#default_value' => $get['fields'],
+    '#default_value' => $get['entity_field_wysiwyg'],
+  );
+  $form['filter_set']['host_type'] = array(
+    '#type' => 'select',
+    '#title' => t('Entity Type'),
+    '#options' => array(-1 => t('All')) + _stanford_alt_check_column_values('host_type'),
+    '#default_value' => $get['host_type'],
+    '#ajax' => array(
+      'callback' => '_stanford_alt_check_host_bundle',
+      'wrapper' => 'host-bundle-select',
+    ),
+  );
+
+  $condition = array();
+  if (isset($form_state['values']['filter_set']['host_type'])) {
+    $host_type = $form_state['values']['filter_set']['host_type'];
+    if ($host_type != -1) {
+      $condition = array('host_type' => $host_type);
+    }
+  }
+
+  $form['filter_set']['host_bundle'] = array(
+    '#type' => 'select',
+    '#title' => t('Entity Bundle'),
+    '#options' => array(-1 => t('All')) + _stanford_alt_check_column_values('host_bundle', $condition),
+    '#default_value' => $get['host_bundle'],
+    '#prefix' => '<div id="host-bundle-select">',
+    '#suffix' => '</div>',
   );
   // Filter Buttons.
   $form['filter_set']['actions'] = array('#type' => 'actions');
@@ -129,6 +158,45 @@ function _stanford_alt_check_filter_form($form, &$form_state) {
     '#submit' => array('_stanford_alt_check_form_filter_submit'),
   );
   return $form;
+}
+
+/**
+ * Ajax callback for host_type selection.
+ */
+function _stanford_alt_check_host_bundle($form, &$form_state) {
+  return $form['filter_set']['host_bundle'];
+}
+
+/**
+ * Grab all distinct values from the table.
+ *
+ * @param string $column
+ *   The column in the table to grab distinct values from.
+ * @param array $conditions
+ *   Any conditions to apply.
+ *
+ * @return array
+ *   Keyed array of all distinct values.
+ */
+function _stanford_alt_check_column_values($column, array $conditions = array()) {
+  if (!is_string($column) || !db_field_exists('stanford_alt_check', $column)) {
+    return array();
+  }
+  $values = array();
+
+  $query = db_select('stanford_alt_check', 's')
+    ->distinct()
+    ->fields('s', array($column));
+
+  foreach ($conditions as $key => $value) {
+    $query->condition($key, $value);
+  }
+
+  $results = $query->execute();
+  while ($item = $results->fetchField()) {
+    $values[$item] = $item;
+  }
+  return $values;
 }
 
 /**
@@ -183,18 +251,16 @@ function _stanford_alt_check_form_filter_submit($form, &$form_state) {
   }
 
   $get = drupal_get_query_parameters($_GET);
-  if ($form_state['values']['filter_set']['alt_text']) {
-    $get['alt_text'] = $form_state['values']['filter_set']['alt_text'];
-  }
-  else {
-    unset($get['alt_text']);
-  }
+  $filters = $form_state['values']['filter_set'];
+  unset($filters['actions']);
 
-  if ($form_state['values']['filter_set']['fields']) {
-    $get['fields'] = $form_state['values']['filter_set']['fields'];
-  }
-  else {
-    unset($get['fields']);
+  foreach ($filters as $key => $value) {
+    if ($value == -1) {
+      unset($get[$key]);
+    }
+    else {
+      $get[$key] = $value;
+    }
   }
 
   $form_state['redirect'] = array(

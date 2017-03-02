@@ -71,6 +71,7 @@ function stanford_alt_check_entity_insert($entity, $type) {
     return;
   }
 
+  $entity_info = entity_get_info($host_type);
   foreach ($images as $field_type => $fields) {
     foreach ($fields as $field_name => $deltas) {
       foreach ($deltas as $delta => $field_images) {
@@ -83,8 +84,8 @@ function stanford_alt_check_entity_insert($entity, $type) {
             'entity_field' => $field_name,
             'entity_field_wysiwyg' => $field_type == 'wysiwyg',
             'host_title' => $host_title,
-            'host_type' => $host_type,
-            'host_bundle' => $host_bundle,
+            'host_type' => $entity_info['label'],
+            'host_bundle' => $entity_info['bundles'][$host_bundle]['label'],
             'host_changed' => $host_entity->changed ? $host_entity->changed : time(),
             'host_published' => $host_status,
             'image_meta' => serialize(array(
@@ -299,7 +300,7 @@ function _stanford_alt_check_entity_images($entity, $type, $bundle) {
  * @return array
  *   All images from the field keyed by the delta.
  */
-function _stanford_alt_check_upload_images($items) {
+function _stanford_alt_check_upload_images(array $items) {
   $images = array();
   foreach ($items as $delta => $item) {
     $file = file_load($item['fid']);
@@ -324,7 +325,7 @@ function _stanford_alt_check_upload_images($items) {
  * @return array
  *   All images from the field keyed by the delta and the position in the html.
  */
-function _stanford_alt_check_wysiwyg_images($items) {
+function _stanford_alt_check_wysiwyg_images(array $items) {
   $images = array();
   foreach ($items as $delta => $item) {
 
@@ -401,13 +402,7 @@ function _stanford_alt_check_wysiwyg_image(DOMElement $image) {
  *   Images from the table as requested by the filters and sorting.
  */
 function _stanford_alt_check_get_images() {
-  $header = array(
-    array('data' => t('Title'), 'field' => 's.host_title', 'sort' => 'ASC'),
-    array('data' => t('Published'), 'field' => 's.host_published'),
-    array('data' => t('Alt Attribute'), 'field' => 's.alt_text'),
-    array('data' => t('Last Changed'), 'field' => 's.host_changed'),
-  );
-
+  $header = _stanford_alt_check_table_headers();
   $rows = array();
 
   $row_query = db_select('stanford_alt_check', 's')
@@ -444,27 +439,21 @@ function _stanford_alt_check_get_images() {
  */
 function _stanford_alt_check_set_filters(TableSort &$query) {
   $get = drupal_get_query_parameters();
-  $alt = NULL;
-  if (isset($get['alt_text'])) {
-    $alt = $get['alt_text'];
-  }
-  $field = NULL;
-  if (isset($get['fields'])) {
-    $field = $get['fields'];
-  }
-
-  if ($alt == 'filled') {
-    $query->condition('alt_text', '', '!=');
-  }
-  elseif ($alt == 'empty') {
-    $query->condition('alt_text', '', '=');
-  }
-
-  if ($field == 'wysiwyg') {
-    $query->condition('entity_field_wysiwyg', 1);
-  }
-  elseif ($field == 'upload') {
-    $query->condition('entity_field_wysiwyg', 0);
+  foreach ($get as $key => $value) {
+    if (db_field_exists('stanford_alt_check', $key) && $value != -1) {
+      $value = check_plain($value);
+      if ($key == 'alt_text') {
+        if ($value == 'filled') {
+          $query->condition('alt_text', '', '!=');
+        }
+        elseif ($value == 'empty') {
+          $query->condition('alt_text', '', '=');
+        }
+      }
+      else {
+        $query->condition($key, $value);
+      }
+    }
   }
 }
 
@@ -487,8 +476,26 @@ function _stanford_alt_check_rescan_entity($entity_id, $type) {
  * @param array $data
  *   Array of the entity id and type.
  */
-function _stanford_alt_check_rescan_entity_queue($data) {
+function _stanford_alt_check_rescan_entity_queue(array $data) {
   list($entity_id, $type) = $data;
   $entity = entity_load_single($type, $entity_id);
   stanford_alt_check_entity_insert($entity, $type);
+}
+
+/**
+ * Get the table header array.
+ *
+ * @return array
+ *   Table headers.
+ */
+function _stanford_alt_check_table_headers() {
+  return array(
+    array('data' => t('Image')),
+    array('data' => t('Title'), 'field' => 's.host_title', 'sort' => 'ASC'),
+    array('data' => t('Published'), 'field' => 's.host_published'),
+    array('data' => t('Alt Attribute'), 'field' => 's.alt_text'),
+    array('data' => t('Last Changed'), 'field' => 's.host_changed'),
+    array('data' => t('Entity Type'), 'field' => 's.host_type'),
+    array('data' => t('Entity Bundle'), 'field' => 's.host_bundle'),
+  );
 }
