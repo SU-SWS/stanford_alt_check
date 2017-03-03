@@ -8,13 +8,6 @@
 define('STANFORD_ALT_CHECK_PER_PAGE', 10);
 
 /**
- * Implements hook_help().
- */
-function stanford_alt_check_help($path, $arg) {
-  return t('This is my text');
-}
-
-/**
  * Implements hook_ctools_plugin_api().
  */
 function stanford_alt_check_ctools_plugin_api($owner, $api) {
