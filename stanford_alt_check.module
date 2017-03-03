@@ -8,6 +8,13 @@
 define('STANFORD_ALT_CHECK_PER_PAGE', 10);
 
 /**
+ * Implements hook_help().
+ */
+function stanford_alt_check_help($path, $arg) {
+  return t('This is my text');
+}
+
+/**
  * Implements hook_ctools_plugin_api().
  */
 function stanford_alt_check_ctools_plugin_api($owner, $api) {
@@ -493,10 +500,11 @@ function _stanford_alt_check_table_headers() {
   return array(
     array('data' => t('Image')),
     array('data' => t('Title'), 'field' => 's.host_title', 'sort' => 'ASC'),
+    array('data' => t('Entity Type'), 'field' => 's.host_type'),
+    array('data' => t('Entity Bundle'), 'field' => 's.host_bundle'),
     array('data' => t('Published'), 'field' => 's.host_published'),
     array('data' => t('Alt Attribute'), 'field' => 's.alt_text'),
     array('data' => t('Last Changed'), 'field' => 's.host_changed'),
-    array('data' => t('Entity Type'), 'field' => 's.host_type'),
-    array('data' => t('Entity Bundle'), 'field' => 's.host_bundle'),
+
   );
 }

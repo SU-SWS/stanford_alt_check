@@ -88,7 +88,13 @@ function stanford_alt_check_form_submit($form, &$form_state) {
  * Add filter set to the form.
  */
 function _stanford_alt_check_filter_form($form, &$form_state) {
-  $get = array('alt_text' => 0, 'fields' => 0, 'entity_type' => NULL);
+  $get = array(
+    'alt_text' => NULL,
+    'fields' => NULL,
+    'host_type' => NULL,
+    'host_bundle' => NULL,
+    'entity_field_wysiwyg' => NULL,
+  );
   $get = array_merge($get, drupal_get_query_parameters($_GET));
 
   // Filters.
@@ -127,7 +133,7 @@ function _stanford_alt_check_filter_form($form, &$form_state) {
     ),
   );
 
-  $condition = array();
+  $condition = array('host_type' => $get['host_type']);
   if (isset($form_state['values']['filter_set']['host_type'])) {
     $host_type = $form_state['values']['filter_set']['host_type'];
     if ($host_type != -1) {
@@ -189,7 +195,9 @@ function _stanford_alt_check_column_values($column, array $conditions = array())
     ->fields('s', array($column));
 
   foreach ($conditions as $key => $value) {
-    $query->condition($key, $value);
+    if ($value) {
+      $query->condition($key, $value);
+    }
   }
 
   $results = $query->execute();
