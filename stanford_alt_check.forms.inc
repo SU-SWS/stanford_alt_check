@@ -18,8 +18,21 @@ function stanford_alt_check_form($form, &$form_state) {
   $form = _stanford_alt_check_filter_form($form, $form_state);
 
   list($rows, $total_rows) = _stanford_alt_check_get_images();
-
   foreach ($rows as $row_num => $row) {
+
+    $entity = entity_load_single($row['entity_type'], $row['entity_id']);
+    $alt_field = array('#markup' => $row['alt_text']);
+
+    if ($entity && entity_access('update', $row['entity_type'], $entity)) {
+      $alt_field = array(
+        '#type' => 'textfield',
+        '#title' => t('Alt Text for !src', array('!src' => $row['uri'])),
+        '#default_value' => $row['alt_text'],
+        '#title_display' => 'invisible',
+        '#maxlength' => 512,
+      );
+    }
+
     $form[$row_num] = array(
       'image' => array('#markup' => _stanford_alt_check_build_image($row['uri'])),
       'title' => array('#markup' => l($row['host_title'], $row['image_meta']['host_uri'])),
@@ -27,13 +40,7 @@ function stanford_alt_check_form($form, &$form_state) {
       'bundle' => array('#markup' => $row['host_bundle']),
       'published' => array('#markup' => $row['host_published'] ? t('Yes') : t('No')),
       'changed' => array('#markup' => format_interval(time() - $row['host_changed'])),
-      'alt' => array(
-        '#type' => 'textfield',
-        '#title' => t('Alt Text for !src', array('!src' => $row['uri'])),
-        '#default_value' => $row['alt_text'],
-        '#title_display' => 'invisible',
-        '#maxlength' => 512,
-      ),
+      'alt' => $alt_field,
     );
     $form_state['images'][$row_num] = $row;
   }

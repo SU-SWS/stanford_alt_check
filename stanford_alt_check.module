@@ -17,6 +17,18 @@ function stanford_alt_check_ctools_plugin_api($owner, $api) {
 }
 
 /**
+ * Implements hook_permission().
+ */
+function stanford_alt_check_permission() {
+  return array(
+    'access alt check page' => array(
+      'title' => t('Access Alt Check Overview'),
+      'description' => t('Allow access to the alt check overview page, but not access to edit alt attributes.'),
+    ),
+  );
+}
+
+/**
  * Implements hook_menu().
  */
 function stanford_alt_check_menu() {
@@ -26,7 +38,7 @@ function stanford_alt_check_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_alt_check_form'),
     'file' => 'stanford_alt_check.forms.inc',
-    'access arguments' => array('access content overview'),
+    'access arguments' => array('access alt check page'),
     'type' => MENU_NORMAL_ITEM,
   );
 
@@ -36,7 +48,7 @@ function stanford_alt_check_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_alt_check_form'),
     'file' => 'stanford_alt_check.forms.inc',
-    'access arguments' => array('access content overview'),
+    'access arguments' => array('access alt check page'),
     'type' => MENU_NORMAL_ITEM,
     'menu_name' => 'menu-manage-content-by-type',
   );
@@ -140,7 +152,7 @@ function stanford_alt_check_theme($existing, $type, $theme, $path) {
  *   Array of host entity data or FALSE if it fails to obtain host.
  */
 function _stanford_alt_check_get_host($entity, $type) {
-  $host_entity = $host_type = NULL;
+  $host_type = NULL;
   switch ($type) {
     case 'field_collection_item':
       // Field Collection entities: Change $host_type & $host_entity to host
