@@ -340,11 +340,13 @@ function _stanford_alt_check_rescan() {
       $field_query->entityCondition('entity_type', $type);
       $results = $field_query->execute();
 
-      foreach (array_keys($results[$type]) as $entity_id) {
-        $batch['operations'][] = array(
-          '_stanford_alt_check_rescan_entity',
-          array($entity_id, $type),
-        );
+      if ($results && isset($results[$type])) {
+        foreach (array_keys($results[$type]) as $entity_id) {
+          $batch['operations'][] = array(
+            '_stanford_alt_check_rescan_entity',
+            array($entity_id, $type),
+          );
+        }
       }
     }
   }
