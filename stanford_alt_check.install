@@ -133,8 +133,23 @@ function stanford_alt_check_update_7101() {
  * Adds host_type and host_bundle to table.
  */
 function stanford_alt_check_update_7102() {
-  if (!db_field_exists('stanford_alt_check', '')) {
-    drupal_get_schema('stanford_alt_check', TRUE);
-    stanford_alt_check_install();
+  if (!db_field_exists('stanford_alt_check', 'host_type')) {
+    $type = array(
+      'type' => 'varchar',
+      'length' => 255,
+      'not null' => TRUE,
+      'default' => '',
+    );
+    db_add_field('stanford_alt_check', 'host_type', $type);
   }
+  if (!db_field_exists('stanford_alt_check', 'host_bundle')) {
+    $bundle = array(
+      'type' => 'varchar',
+      'length' => 255,
+      'not null' => TRUE,
+      'default' => '',
+    );
+    db_add_field('stanford_alt_check', 'host_bundle', $bundle);
+  }
+  stanford_alt_check_install();
 }

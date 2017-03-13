@@ -16,14 +16,7 @@
  */
 function theme_stanford_alt_check_form(array $vars) {
   $form = $vars['form'];
-
-  $header = array(
-    array('data' => t('Image')),
-    array('data' => t('Title'), 'field' => 's.host_title', 'sort' => 'ASC'),
-    array('data' => t('Published'), 'field' => 's.host_published'),
-    array('data' => t('Alt Attribute'), 'field' => 's.alt_text'),
-    array('data' => t('Last Changed'), 'field' => 's.host_changed'),
-  );
+  $header = _stanford_alt_check_table_headers();
 
   $rows = array();
   foreach (element_children($form) as $key) {
@@ -35,6 +28,8 @@ function theme_stanford_alt_check_form(array $vars) {
     $rows[] = array(
       'Image' => drupal_render($form[$key]['image']),
       'Title' => drupal_render($form[$key]['title']),
+      'Entity Type' => drupal_render($form[$key]['type']),
+      'Entity Bundle' => drupal_render($form[$key]['bundle']),
       'Published' => drupal_render($form[$key]['published']),
       'Alt Text' => drupal_render($form[$key]['alt']),
       'Changed' => drupal_render($form[$key]['changed']),
