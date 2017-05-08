@@ -1,4 +1,4 @@
-#[Stanford Alt Check](https://github.com/SU-SWS/stanford_alt_check)
+# [Stanford Alt Check](https://github.com/SU-SWS/stanford_alt_check)
 ##### Version: 7.x-1.0-dev
 
 Maintainers: [pookmish](https://github.com/pookmish), [jbickar](https://github.com/jbickar), [sherakama](https://github.com/sherakama)
